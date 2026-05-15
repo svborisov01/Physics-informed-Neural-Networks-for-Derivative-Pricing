@@ -1,7 +1,7 @@
 import numpy as np
 from support_tools.analytical_pricing_tools import heston_call_price, heston_put_price
 
-def heston_2d_slice_test(pinn, v=0.3, r=0.2, kappa=2.0, theta=0.3, sigma=0.2, rho=0.7, K=150):
+def heston_2d_slice_test(pinn, v=0.3, r=0.2, kappa=2.0, theta=0.3, sigma=0.2, rho=0.7, K=150, return_values = False):
     res = []
     pinn_prices = []
     anal_prices = []
@@ -62,3 +62,6 @@ def heston_2d_slice_test(pinn, v=0.3, r=0.2, kappa=2.0, theta=0.3, sigma=0.2, rh
     print("MSE =", np.mean(res))
     print("RMSE =", np.sqrt(np.mean(res)))
     print("MAE =", np.mean(np.abs(pinn_prices - anal_prices)))
+
+    if return_values:
+        return spot_grid, tau_grid, res, pinn_prices, anal_prices

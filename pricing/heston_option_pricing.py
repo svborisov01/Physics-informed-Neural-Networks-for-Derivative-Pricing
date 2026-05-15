@@ -358,6 +358,8 @@ class PINN(nn.Module):
         self.theta_max = float(theta_max)
         self.sigma_max = float(sigma_max)
         self.call_put = call_put
+        self.depth = depth
+        self.hidden = hidden
 
         input_dim = 20
 
@@ -541,6 +543,7 @@ def train_network(
     grad_clip=1.0,
     print_every=100,
     best_model_path="best_pinn_heston_xspace.pt",
+    save_model = True,
     weight_decay=1e-2,
     cosine_eta_min=1e-5,
     detect_anomaly=False,
@@ -567,6 +570,8 @@ def train_network(
         "terminal": [],
         "boundary": [],
         "lr": [],
+        "model depth": pinn.depth,
+        "model width": pinn.hidden
     }
 
     best_loss = float("inf")
@@ -660,30 +665,31 @@ def train_network(
         history["boundary"].append(loss_boundary.item())
         history["lr"].append(current_lr)
 
-        if current_loss < best_loss:
+        if (current_loss < best_loss):
             best_loss = current_loss
             best_epoch = epoch
             best_state_dict = copy.deepcopy(pinn.state_dict())
 
-            torch.save(
-                {
-                    "epoch": epoch,
-                    "model_state_dict": best_state_dict,
-                    "optimizer_state_dict": optimizer.state_dict(),
-                    "loss": best_loss,
-                    "sigma_mode": sigma_mode,
-                    "call_put": getattr(pinn, "call_put", None),
-                    "x_min": getattr(pinn, "x_min", None),
-                    "x_max": getattr(pinn, "x_max", None),
-                    "v_max": getattr(pinn, "v_max", None),
-                    "T": getattr(pinn, "T", None),
-                    "r_max": getattr(pinn, "r_max", None),
-                    "kappa_max": getattr(pinn, "kappa_max", None),
-                    "theta_max": getattr(pinn, "theta_max", None),
-                    "sigma_max": getattr(pinn, "sigma_max", None),
-                },
-                best_model_path,
-            )
+            if save_model:
+                torch.save(
+                    {
+                        "epoch": epoch,
+                        "model_state_dict": best_state_dict,
+                        "optimizer_state_dict": optimizer.state_dict(),
+                        "loss": best_loss,
+                        "sigma_mode": sigma_mode,
+                        "call_put": getattr(pinn, "call_put", None),
+                        "x_min": getattr(pinn, "x_min", None),
+                        "x_max": getattr(pinn, "x_max", None),
+                        "v_max": getattr(pinn, "v_max", None),
+                        "T": getattr(pinn, "T", None),
+                        "r_max": getattr(pinn, "r_max", None),
+                        "kappa_max": getattr(pinn, "kappa_max", None),
+                        "theta_max": getattr(pinn, "theta_max", None),
+                        "sigma_max": getattr(pinn, "sigma_max", None),
+                    },
+                    best_model_path,
+                )
 
         if epoch % print_every == 0 or epoch == 1:
             grad_norm_str = f"{float(grad_norm):.3e}" if grad_norm is not None else "None"

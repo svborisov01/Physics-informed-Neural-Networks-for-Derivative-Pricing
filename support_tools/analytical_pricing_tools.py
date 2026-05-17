@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+from scipy.integrate import quad
 
 def bs_option_torch(S, K, tau, r, sigma_bs, call_put="Call"):
     """
@@ -140,11 +141,6 @@ def sigma_bs_effective(
     sigma_bs = sigma_bs.clamp_min(np.sqrt(eps))
 
     return sigma_bs
-
-import numpy as np
-from scipy.integrate import quad
-from scipy.stats import norm
-
 
 def heston_char_func(u, tau, S0, r, q, v0, kappa, theta, sigma, rho, j=2):
     """

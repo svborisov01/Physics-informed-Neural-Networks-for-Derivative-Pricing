@@ -142,7 +142,7 @@ def american_constraint_x(pinn, Npoints=2000):
     x = (pinn.x_min + (pinn.x_max - pinn.x_min) * torch.rand(Npoints, 1, device=device, dtype=dtype)).requires_grad_(True)
     tau = (1e-4 + (pinn.T - 1e-4) * torch.rand(Npoints, 1, device=device, dtype=dtype)).requires_grad_(True)
     r = (1e-4 + (pinn.r_max - 1e-4) * torch.rand(Npoints, 1, device=device, dtype=dtype)).requires_grad_(True)
-    sigma = (1e-4 + (pinn.sigma+max - 1e-4) * torch.rand(Npoints, 1, device=device, dtype=dtype)).requires_grad_(True)
+    sigma = (1e-4 + (pinn.sigma_max - 1e-4) * torch.rand(Npoints, 1, device=device, dtype=dtype)).requires_grad_(True)
 
     u = pinn.forward_x(x, tau, r, sigma)
 
@@ -324,8 +324,8 @@ class PINN(nn.Module):
 
 def train_network(
     pinn,
-    N_pde=5000,
-    N_boundary=2000,
+    n_pde=5000,
+    n_boundary=2000,
     epochs=5000,
     lr=1e-4,
     lambda_boundary=1.0,
@@ -333,11 +333,11 @@ def train_network(
     lambda_american=0.0,
     grad_clip=1.0,
     print_every=100,
-    best_model_path="bestpinnxspace.pt",
+    best_model_path="best_pinn_x_space.pt",
     save_model=True,
     weight_decay=1e-2,
     cosine_eta_min=1e-5,
-    detectanomaly=False,
+    detect_anomaly=False,
     device=None,
 ):
     if device is None:
@@ -362,26 +362,26 @@ def train_network(
         "lr": [],
         "best_loss": None,
         "best_epoch": None,
-        "model_depth": pinn.depth,
-        "model_width": pinn.hidden,
+        "model depth": pinn.depth,
+        "model width": pinn.hidden,
     }
 
-    bestloss = float("inf")
-    bestepoch = None
-    beststatedict = None
-    starttime = time.time()
+    best_loss = float("inf")
+    best_epoch = None
+    best_state_dict = None
+    start_time = time.time()
 
-    torch.autograd.set_detect_anomaly(detectanomaly)
+    torch.autograd.set_detect_anomaly(detect_anomaly)
 
     for epoch in range(1, epochs + 1):
         pinn.train()
         optimizer.zero_grad(set_to_none=True)
 
-        lossphysics = pde_dynamic_x(pinn=pinn, Npoints=N_pde)
-        lossterminal = spot_terminal_condition_x(pinn=pinn, Npoints=N_boundary)
-        lossboundary = spot_boundary_conditions_x(
+        loss_physics = pde_dynamic_x(pinn=pinn, Npoints=n_pde)
+        loss_terminal = spot_terminal_condition_x(pinn=pinn, Npoints=n_boundary)
+        loss_boundary = spot_boundary_conditions_x(
             pinn=pinn,
-            Npoints=N_boundary,
+            Npoints=n_boundary,
             lambdapricelow=1.0,
             lambdadeltalow=0.1,
             lambdapricehigh=1.0,
@@ -389,106 +389,108 @@ def train_network(
         )
 
         if lambda_american > 0.0:
-            lossamerican = american_constraint_x(pinn=pinn, Npoints=N_boundary)
+            loss_american = american_constraint_x(pinn=pinn, Npoints=n_boundary)
         else:
-            lossamerican = torch.zeros(1, device=device, dtype=next(pinn.parameters()).dtype).squeeze()
+            loss_american = torch.zeros(
+                1, device=device, dtype=next(pinn.parameters()).dtype
+            ).squeeze()
 
         loss = (
-            lossphysics
-            + lambda_terminal * lossterminal
-            + lambda_boundary * lossboundary
-            + lambda_american * lossamerican
+            loss_physics
+            + lambda_terminal * loss_terminal
+            + lambda_boundary * loss_boundary
+            + lambda_american * loss_american
         )
 
         if not torch.isfinite(loss):
             raise RuntimeError(
                 f"Non-finite total loss at epoch {epoch}: "
-                f"physics={lossphysics.item()}, "
-                f"terminal={lossterminal.item()}, "
-                f"boundary={lossboundary.item()}, "
-                f"american={lossamerican.item()}"
+                f"physics={loss_physics.item()}, "
+                f"terminal={loss_terminal.item()}, "
+                f"boundary={loss_boundary.item()}, "
+                f"american={loss_american.item()}"
             )
 
         loss.backward()
 
-        badgrad = False
+        bad_grad = False
         for name, param in pinn.named_parameters():
             if param.grad is not None and not torch.isfinite(param.grad).all():
-                print(f"BAD GRAD epoch={epoch} param={name}")
-                badgrad = True
+                print(f"BAD_GRAD epoch={epoch} param={name}")
+                bad_grad = True
                 break
-        if badgrad:
+        if bad_grad:
             raise RuntimeError(f"Non-finite gradient detected at epoch {epoch}")
 
-        gradnorm = None
+        grad_norm = None
         if grad_clip is not None:
-            gradnorm = torch.nn.utils.clip_grad_norm_(pinn.parameters(), grad_clip)
+            grad_norm = torch.nn.utils.clip_grad_norm_(pinn.parameters(), grad_clip)
 
         optimizer.step()
         scheduler.step()
 
-        badparam = False
+        bad_param = False
         for name, param in pinn.named_parameters():
             if not torch.isfinite(param).all():
-                print(f"BAD PARAM epoch={epoch} param={name}")
-                badparam = True
+                print(f"BAD_PARAM epoch={epoch} param={name}")
+                bad_param = True
                 break
-        if badparam:
+        if bad_param:
             raise RuntimeError(f"Non-finite parameter detected after step at epoch {epoch}")
 
-        elapsed = time.time() - starttime
-        currentlr = optimizer.param_groups[0]["lr"]
-        currentloss = loss.item()
+        elapsed_time = time.time() - start_time
+        current_lr = optimizer.param_groups[0]["lr"]
+        current_loss = loss.item()
 
         history["epoch"].append(epoch)
-        history["elapsed_time"].append(elapsed)
-        history["total"].append(currentloss)
-        history["physics"].append(lossphysics.item())
-        history["terminal"].append(lossterminal.item())
-        history["boundary"].append(lossboundary.item())
-        history["american"].append(lossamerican.item())
-        history["lr"].append(currentlr)
+        history["elapsed_time"].append(elapsed_time)
+        history["total"].append(current_loss)
+        history["physics"].append(loss_physics.item())
+        history["terminal"].append(loss_terminal.item())
+        history["boundary"].append(loss_boundary.item())
+        history["american"].append(loss_american.item())
+        history["lr"].append(current_lr)
 
-        if currentloss < bestloss:
-            bestloss = currentloss
-            bestepoch = epoch
-            beststatedict = copy.deepcopy(pinn.state_dict())
+        if current_loss < best_loss:
+            best_loss = current_loss
+            best_epoch = epoch
+            best_state_dict = copy.deepcopy(pinn.state_dict())
 
             if save_model:
                 torch.save(
                     {
                         "epoch": epoch,
-                        "model_state_dict": beststatedict,
+                        "model_state_dict": best_state_dict,
                         "optimizer_state_dict": optimizer.state_dict(),
-                        "loss": bestloss,
+                        "loss": best_loss,
                         "call_put": getattr(pinn, "call_put", None),
-                        "xmin": getattr(pinn, "xmin", None),
-                        "xmax": getattr(pinn, "xmax", None),
+                        "x_min": getattr(pinn, "x_min", None),
+                        "x_max": getattr(pinn, "x_max", None),
                         "T": getattr(pinn, "T", None),
-                        "rmax": getattr(pinn, "rmax", None),
-                        "sigmamax": getattr(pinn, "sigmamax", None),
+                        "r_max": getattr(pinn, "r_max", None),
+                        "sigma_max": getattr(pinn, "sigma_max", None),
                     },
                     best_model_path,
                 )
 
         if epoch % print_every == 0 or epoch == 1:
-            gradnormstr = f"{float(gradnorm):.3e}" if gradnorm is not None else "None"
+            grad_norm_str = f"{float(grad_norm):.3e}" if grad_norm is not None else "None"
             print(
                 f"Epoch {epoch:6d} | "
-                f"Time: {elapsed:10.2f}s | "
-                f"LR: {currentlr:.3e} | "
-                f"Total: {currentloss:.6e} | "
-                f"PDE_x: {lossphysics.item():.6e} | "
-                f"Terminal_x: {lossterminal.item():.6e} | "
-                f"Boundary_x: {lossboundary.item():.6e} | "
-                f"GradNorm: {gradnormstr} | "
-                f"Best: {bestloss:.6e} @ {bestepoch}"
+                f"Time: {elapsed_time:10.2f}s | "
+                f"LR: {current_lr:.3e} | "
+                f"Total: {current_loss:.6e} | "
+                f"PDE_x: {loss_physics.item():.6e} | "
+                f"Terminal_x: {loss_terminal.item():.6e} | "
+                f"Boundary_x: {loss_boundary.item():.6e} | "
+                f"GradNorm: {grad_norm_str} | "
+                f"Best: {best_loss:.6e} @ {best_epoch}"
             )
 
-    history["best_loss"] = bestloss
-    history["best_epoch"] = bestepoch
+    history["best_loss"] = best_loss
+    history["best_epoch"] = best_epoch
 
-    if beststatedict is not None:
-        pinn.load_state_dict(beststatedict)
+    if best_state_dict is not None:
+        pinn.load_state_dict(best_state_dict)
 
     return history

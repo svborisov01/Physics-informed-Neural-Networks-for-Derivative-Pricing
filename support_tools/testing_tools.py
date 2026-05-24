@@ -108,14 +108,22 @@ def bs_2d_slice_test(
         row_anal = []
 
         for tau_iter in tau_grid:
-            # PINN price (normalized architecture: predict_price multiplies by K)
-            price_pinn_t = pinn.predict_price(
+            if hasattr(pinn, "sigma"):
+                price_pinn_t = pinn.predict_price(
                 S=spot,
                 K=K,
                 tau=tau_iter,
-                r=r,
-                sigma=sigma_bs,
             )
+            else:
+            # PINN price (normalized architecture: predict_price multiplies by K)
+                price_pinn_t = pinn.predict_price(
+                    S=spot,
+                    K=K,
+                    tau=tau_iter,
+                    r=r,
+                    sigma=sigma_bs,
+                )
+
             price_pinn = float(price_pinn_t.detach().to("cpu").reshape(-1)[0])
 
             # Analytical BS price

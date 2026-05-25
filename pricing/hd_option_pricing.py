@@ -5,7 +5,9 @@ import time
 import copy
 import warnings
 
+
 warnings.filterwarnings("ignore", category=UserWarning)
+
 
 # ============================================================
 # Set random seeds for reproducibility
@@ -13,14 +15,27 @@ warnings.filterwarnings("ignore", category=UserWarning)
 torch.manual_seed(42)
 np.random.seed(42)
 
+
 def pde_dynamic_x(pinn, Npoints=5000):
     device = next(pinn.parameters()).device
     dtype = next(pinn.parameters()).dtype
 
-    x = (pinn.x_min + (pinn.x_max - pinn.x_min) * torch.rand(Npoints, 1, device=device, dtype=dtype)).requires_grad_(True)
-    tau = (1e-4 + (pinn.T - 1e-4) * torch.rand(Npoints, 1, device=device, dtype=dtype)).requires_grad_(True)
-    r = (1e-4 + (pinn.r_max - 1e-4) * torch.rand(Npoints, 1, device=device, dtype=dtype)).requires_grad_(True)
-    sigma = (1e-4 + (pinn.sigma_max - 1e-4) * torch.rand(Npoints, 1, device=device, dtype=dtype)).requires_grad_(True)
+    x = (
+        pinn.x_min
+        + (pinn.x_max - pinn.x_min) * torch.rand(Npoints, 1, device=device, dtype=dtype)
+    ).requires_grad_(True)
+    tau = (
+        1e-4
+        + (pinn.T - 1e-4) * torch.rand(Npoints, 1, device=device, dtype=dtype)
+    ).requires_grad_(True)
+    r = (
+        1e-4
+        + (pinn.r_max - 1e-4) * torch.rand(Npoints, 1, device=device, dtype=dtype)
+    ).requires_grad_(True)
+    sigma = (
+        1e-4
+        + (pinn.sigma_max - 1e-4) * torch.rand(Npoints, 1, device=device, dtype=dtype)
+    ).requires_grad_(True)
 
     def bs_operator(f):
         ftau = torch.autograd.grad(f.sum(), tau, create_graph=True)[0]
@@ -40,22 +55,31 @@ def spot_terminal_condition_x(pinn, Npoints=2000):
     device = next(pinn.parameters()).device
     dtype = next(pinn.parameters()).dtype
 
-    x = (pinn.x_min + (pinn.x_max - pinn.x_min) * torch.rand(Npoints, 1, device=device, dtype=dtype)).requires_grad_(True)
+    x = (
+        pinn.x_min
+        + (pinn.x_max - pinn.x_min) * torch.rand(Npoints, 1, device=device, dtype=dtype)
+    ).requires_grad_(True)
     tau = torch.zeros(Npoints, 1, device=device, dtype=dtype)
-    r = (1e-4 + (pinn.r_max - 1e-4) * torch.rand(Npoints, 1, device=device, dtype=dtype)).requires_grad_(True)
-    sigma = (1e-4 + (pinn.sigma_max - 1e-4) * torch.rand(Npoints, 1, device=device, dtype=dtype)).requires_grad_(True)
+    r = (
+        1e-4
+        + (pinn.r_max - 1e-4) * torch.rand(Npoints, 1, device=device, dtype=dtype)
+    ).requires_grad_(True)
+    sigma = (
+        1e-4
+        + (pinn.sigma_max - 1e-4) * torch.rand(Npoints, 1, device=device, dtype=dtype)
+    ).requires_grad_(True)
 
     u = pinn.forward_x(x, tau, r, sigma)
 
     cp = pinn.call_put.lower()
     if cp == "call":
-        payoff = torch.relu(torch.exp(x) - 1.0)
+        payoff = torch.nn.functional.relu(torch.exp(x) - 1.0)
     elif cp == "put":
-        payoff = torch.relu(1.0 - torch.exp(x))
+        payoff = torch.nn.functional.relu(1.0 - torch.exp(x))
     else:
         raise ValueError("pinn.call_put must be either 'Call' or 'Put'")
 
-    return torch.mean((u - payoff)**2 / (1.0 + payoff)**2)
+    return torch.mean((u - payoff) ** 2 / (1.0 + payoff) ** 2)
 
 
 def spot_boundary_conditions_x(
@@ -64,14 +88,23 @@ def spot_boundary_conditions_x(
     lambdapricelow=1.0,
     lambdadeltalow=0.0,
     lambdapricehigh=1.0,
-    lambdadeltahigh=0.1,
+    lambdadeltahigh=0.0,
 ):
     device = next(pinn.parameters()).device
     dtype = next(pinn.parameters()).dtype
 
-    tau = (1e-4 + (pinn.T - 1e-4) * torch.rand(Npoints, 1, device=device, dtype=dtype)).requires_grad_(True)
-    r = (1e-4 + (pinn.r_max - 1e-4) * torch.rand(Npoints, 1, device=device, dtype=dtype)).requires_grad_(True)
-    sigma = (1e-4 + (pinn.sigma_max - 1e-4) * torch.rand(Npoints, 1, device=device, dtype=dtype)).requires_grad_(True)
+    tau = (
+        1e-4
+        + (pinn.T - 1e-4) * torch.rand(Npoints, 1, device=device, dtype=dtype)
+    ).requires_grad_(True)
+    r = (
+        1e-4
+        + (pinn.r_max - 1e-4) * torch.rand(Npoints, 1, device=device, dtype=dtype)
+    ).requires_grad_(True)
+    sigma = (
+        1e-4
+        + (pinn.sigma_max - 1e-4) * torch.rand(Npoints, 1, device=device, dtype=dtype)
+    ).requires_grad_(True)
 
     xlow = torch.full((Npoints, 1), pinn.x_min, device=device, dtype=dtype).requires_grad_(True)
     xhigh = torch.full((Npoints, 1), pinn.x_max, device=device, dtype=dtype).requires_grad_(True)
@@ -85,32 +118,26 @@ def spot_boundary_conditions_x(
     cp = pinn.call_put.lower()
 
     if cp == "call":
-        # x -> -inf : u -> 0, u_x -> 0
         targetpricelow = torch.zeros_like(ulow)
         targetdeltalow = torch.zeros_like(uxlow)
 
-        # x -> +inf : u -> exp(x) - exp(-r tau), u_x -> exp(x)
         targetpricehigh = torch.exp(xhigh) - torch.exp(-r * tau)
         targetdeltahigh = torch.exp(xhigh)
 
     elif cp == "put":
-        # x -> -inf : u -> exp(-r tau), u_x -> 0
         targetpricelow = torch.exp(-r * tau)
         targetdeltalow = torch.zeros_like(uxlow)
 
-        # x -> +inf : u -> 0, u_x -> 0
         targetpricehigh = torch.zeros_like(uhigh)
         targetdeltahigh = torch.zeros_like(uxhigh)
 
     else:
         raise ValueError("pinn.call_put must be either 'Call' or 'Put'")
 
-    losspricelow  = torch.mean((ulow  - targetpricelow )**2 / (1.0 + torch.abs(targetpricelow ))**2)
-    lossdeltalow  = torch.mean((uxlow - targetdeltalow )**2 / (1.0 + torch.abs(targetdeltalow ))**2)
-    losspricehigh = torch.mean((uhigh - targetpricehigh)**2 / (1.0 + torch.abs(targetpricehigh))**2)
-    lossdeltahigh = torch.mean((uxhigh - targetdeltahigh)**2 / (1.0 + torch.abs(targetdeltahigh))**2)
-    # print(lossdeltahigh.item(), lossdeltalow.item(), losspricehigh.item(), losspricelow.item())
-    # print(uhigh.mean(), uxhigh.mean())
+    losspricelow = torch.mean((ulow - targetpricelow) ** 2 / (1.0 + torch.abs(targetpricelow)) ** 2)
+    lossdeltalow = torch.mean((uxlow - targetdeltalow) ** 2 / (1.0 + torch.abs(targetdeltalow)) ** 2)
+    losspricehigh = torch.mean((uhigh - targetpricehigh) ** 2 / (1.0 + torch.abs(targetpricehigh)) ** 2)
+    lossdeltahigh = torch.mean((uxhigh - targetdeltahigh) ** 2 / (1.0 + torch.abs(targetdeltahigh)) ** 2)
 
     return (
         lambdapricelow * losspricelow
@@ -124,10 +151,22 @@ def american_constraint_x(pinn, Npoints=2000):
     device = next(pinn.parameters()).device
     dtype = next(pinn.parameters()).dtype
 
-    x = (pinn.x_min + (pinn.x_max - pinn.x_min) * torch.rand(Npoints, 1, device=device, dtype=dtype)).requires_grad_(True)
-    tau = (1e-4 + (pinn.T - 1e-4) * torch.rand(Npoints, 1, device=device, dtype=dtype)).requires_grad_(True)
-    r = (1e-4 + (pinn.r_max - 1e-4) * torch.rand(Npoints, 1, device=device, dtype=dtype)).requires_grad_(True)
-    sigma = (1e-4 + (pinn.sigma_max - 1e-4) * torch.rand(Npoints, 1, device=device, dtype=dtype)).requires_grad_(True)
+    x = (
+        pinn.x_min
+        + (pinn.x_max - pinn.x_min) * torch.rand(Npoints, 1, device=device, dtype=dtype)
+    ).requires_grad_(True)
+    tau = (
+        1e-4
+        + (pinn.T - 1e-4) * torch.rand(Npoints, 1, device=device, dtype=dtype)
+    ).requires_grad_(True)
+    r = (
+        1e-4
+        + (pinn.r_max - 1e-4) * torch.rand(Npoints, 1, device=device, dtype=dtype)
+    ).requires_grad_(True)
+    sigma = (
+        1e-4
+        + (pinn.sigma_max - 1e-4) * torch.rand(Npoints, 1, device=device, dtype=dtype)
+    ).requires_grad_(True)
 
     u = pinn.forward_x(x, tau, r, sigma)
 
@@ -140,22 +179,24 @@ def american_constraint_x(pinn, Npoints=2000):
         raise ValueError("pinn.call_put must be either 'Call' or 'Put'")
 
     violation = payoff - u
-    return torch.mean(torch.relu(violation)**2)
+    return torch.mean(torch.relu(violation) ** 2)
 
 
 # ============================================================
-# PINN model in the style of heston_option_pricing.py
+# PINN model in the style of two_d_option_pricing.py
 # ============================================================
+
 
 class PINN(nn.Module):
     """
-    PINN for normalized HD/Black-Scholes option price
+    PINN for normalized HD/Black-Scholes option price with variable deal parameters
 
         u(x, tau, r, sigma) = V / K
         x = log(S / K)
 
     No analytical baseline is used.
-    The architecture enforces the correct asymptotic shape directly.
+    The architecture follows the same overall style as two_d_option_pricing.py,
+    but extends the feature map to include r and sigma as input dimensions.
     """
 
     def __init__(
@@ -181,7 +222,7 @@ class PINN(nn.Module):
         self.depth = depth
         self.hidden = hidden
 
-        input_dim = 12
+        input_dim = 9
         trunk = [nn.Linear(input_dim, hidden), nn.Tanh()]
         for _ in range(depth - 1):
             trunk += [nn.Linear(hidden, hidden), nn.Tanh()]
@@ -205,14 +246,14 @@ class PINN(nn.Module):
         r_norm = r / self.r_max
         sigma_norm = sigma / self.sigma_max
 
-        x_sq = x_norm ** 2
-        x_cube = x_norm ** 3
+        sqrt_tau = torch.sqrt(torch.clamp(tau_norm, min=1e-8))
+        x_over_sqrt_tau = x_norm / (1.0 + sqrt_tau)
+
+        # x_sq = x_norm**2
+        # x_cube = x_norm**3
         abs_x = torch.abs(x_norm)
-        tau_sq = tau_norm ** 2
-        sigma_sq = sigma_norm ** 2
-        x_tau = x_norm * tau_norm
-        x_sigma = x_norm * sigma_norm
-        r_sigma = r_norm * sigma_norm
+        tau_sq = tau_norm**2
+
         cp_feat = self._cp_feature(x)
 
         return torch.cat(
@@ -221,58 +262,30 @@ class PINN(nn.Module):
                 tau_norm,
                 r_norm,
                 sigma_norm,
-                x_sq,
-                x_cube,
+                # x_sq,
+                # x_cube,
                 abs_x,
                 tau_sq,
-                sigma_sq,
-                x_tau,
-                x_sigma,
                 cp_feat,
+                sqrt_tau,
+                x_over_sqrt_tau,
             ],
             dim=1,
         )
 
     def forward_x(self, x, tau, r, sigma):
+        """
+        Plain MLP forward map, matching the spirit of two_d_option_pricing.py.
+
+        The network learns u(x, tau, r, sigma) directly instead of embedding
+        payoff / boundary structure into the architecture. This keeps terminal
+        and boundary losses active during training.
+        """
         features = self._features_from_x(x, tau, r, sigma)
         h = self.trunk(features)
-
-        gate_raw = self.head_gate(h)
-        corr_raw = self.head_corr(h)
-
-        cp = self.call_put.lower()
-
-        if cp == "call":
-            intrinsic = torch.exp(x) - torch.exp(-r * tau)
-
-            # Smooth switching gate from OTM to ITM
-            atm_shift = x / (1.0 + 0.25 * sigma * torch.sqrt(torch.clamp(tau, min=1e-8)))
-            gate = torch.sigmoid(2.0 * atm_shift + gate_raw)
-
-            # Small flexible correction on top of gate, but bounded
-            corr = 0.10 * torch.tanh(corr_raw)
-
-            # Enforce [0,1]-like multiplier
-            multiplier = torch.clamp(gate + corr, min=0.0, max=1.0)
-
-            u = intrinsic * multiplier
-            u = torch.clamp(u, min=0.0)
-            return u
-
-        elif cp == "put":
-            intrinsic = torch.exp(-r * tau) - torch.exp(x)
-
-            atm_shift = -x / (1.0 + 0.25 * sigma * torch.sqrt(torch.clamp(tau, min=1e-8)))
-            gate = torch.sigmoid(2.0 * atm_shift + gate_raw)
-            corr = 0.10 * torch.tanh(corr_raw)
-            multiplier = torch.clamp(gate + corr, min=0.0, max=1.0)
-
-            u = intrinsic * multiplier
-            u = torch.clamp(u, min=0.0)
-            return u
-
-        else:
-            raise ValueError("call_put must be either 'Call' or 'Put'")
+        u_raw = self.head_gate(h)   # reuse one head as the scalar output
+        u = torch.nn.functional.softplus(u_raw)
+        return u
 
     def forward(self, S, K, tau, r, sigma):
         eps = 1e-8
@@ -287,7 +300,9 @@ class PINN(nn.Module):
         sigma_t = torch.as_tensor(sigma, dtype=torch.float32).reshape(-1, 1)
 
         device = next(self.parameters()).device
-        S_t, K_t, tau_t, r_t, sigma_t = [z.to(device) for z in (S_t, K_t, tau_t, r_t, sigma_t)]
+        S_t, K_t, tau_t, r_t, sigma_t = [
+            z.to(device) for z in (S_t, K_t, tau_t, r_t, sigma_t)
+        ]
 
         with torch.no_grad():
             u_hat = self.forward(S_t, K_t, tau_t, r_t, sigma_t)
@@ -307,6 +322,7 @@ class PINN(nn.Module):
 # Training loop in the same general style / print format
 # ============================================================
 
+
 def train_network(
     pinn,
     n_pde=5000,
@@ -321,7 +337,7 @@ def train_network(
     best_model_path="best_pinn_x_space.pt",
     save_model=True,
     weight_decay=1e-2,
-    cosine_eta_min=1e-5,
+    cosine_eta_min=3e-5,
     detect_anomaly=False,
     device=None,
 ):
@@ -330,9 +346,9 @@ def train_network(
     pinn.to(device)
 
     optimizer = torch.optim.AdamW(pinn.parameters(), lr=lr, weight_decay=weight_decay)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
         optimizer,
-        T_max=epochs,
+        T_0=3000,
         eta_min=cosine_eta_min,
     )
 

@@ -361,7 +361,7 @@ class PINN(nn.Module):
         self.depth = depth
         self.hidden = hidden
 
-        input_dim = 20
+        input_dim = 22
 
         layers = [nn.Linear(input_dim, hidden), nn.Tanh()]
         for _ in range(depth - 1):
@@ -437,6 +437,8 @@ class PINN(nn.Module):
             abs_x,
             x_tau,
             cp_feat,
+            x_v,
+            x_gap
         ], dim=1)
 
     def forward_x(self, x, v, tau, r, kappa, theta, sigma, rho):
@@ -556,9 +558,9 @@ def train_network(
         weight_decay=weight_decay,
     )
 
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
         optimizer,
-        T_max=epochs,
+        T_0=3000,
         eta_min=cosine_eta_min,
     )
 

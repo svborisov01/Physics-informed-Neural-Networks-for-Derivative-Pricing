@@ -85,6 +85,7 @@ pinn = PINN(x_min=-5, x_max=5, T=4.0, r=0.05, sigma=0.2, hidden=50, depth=5).to(
 history = train_network(pinn, epochs=5000, best_model_path="trained_models/my_model.pt")
 ```
 
+See **`demo_all_models.ipynb`** for a clean walkthrough of all three models (load → price → test → visualize → Greeks).  
 See `demo notebook.ipynb` for full training, comparison, and architecture-search workflows.
 
 ## Universal Wrapper API
@@ -134,7 +135,8 @@ Legacy checkpoints cannot be loaded with the current code. `load_model` raises a
 │   └── monte_carlo_pricing_tools.py # MC Heston pricer (reference)
 ├── trained_models/             # Saved checkpoints (.pt)
 ├── graphs/                     # Pre-rendered comparison plots
-├── demo notebook.ipynb         # Main demo notebook
+├── demo_all_models.ipynb       # Clean demo of all three models via the wrapper
+├── demo notebook.ipynb         # Full training / architecture-search notebook
 └── old_notebooks/              # Earlier exploratory work
 ```
 

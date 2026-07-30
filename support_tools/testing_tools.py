@@ -20,7 +20,7 @@ def heston_2d_slice_test(
     sigma_mode="mean_reverting",
     return_values=False,
 ):
-    """Test Heston PINN accuracy against analytical Heston pricing."""
+    """Test Heston PINN accuracy against COS-method Heston pricing."""
     return run_slice_test(
         pinn,
         return_values=return_values,

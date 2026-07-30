@@ -1,6 +1,6 @@
 import torch
 import numpy as np
-from scipy.integrate import quad
+
 
 def bs_option_torch(S, K, tau, r, sigma_bs, call_put="Call"):
     """
@@ -31,6 +31,7 @@ def bs_option_torch(S, K, tau, r, sigma_bs, call_put="Call"):
 
     return price
 
+
 def bs_option_normalized_from_x(x, tau, r, sigma_bs, call_put="Call"):
     """
     Normalized BS price u = V / K as a function of x = log(S/K).
@@ -41,6 +42,7 @@ def bs_option_normalized_from_x(x, tau, r, sigma_bs, call_put="Call"):
     K = torch.ones_like(S)
     V_bs = bs_option_torch(S, K, tau, r, sigma_bs, call_put=call_put)
     return V_bs
+
 
 def sigma_bs_effective(
     v,
@@ -100,7 +102,7 @@ def sigma_bs_effective(
 
         theta_t = to_tensor_like(theta).clamp_min(eps)
         kappa_t = to_tensor_like(kappa).clamp_min(eps)
-        tau_t   = to_tensor_like(tau).clamp_min(eps)
+        tau_t = to_tensor_like(tau).clamp_min(eps)
 
         x = (kappa_t * tau_t).clamp_min(eps)
 
@@ -116,7 +118,7 @@ def sigma_bs_effective(
 
         theta_t = to_tensor_like(theta).clamp_min(eps)
         kappa_t = to_tensor_like(kappa).clamp_min(eps)
-        tau_t   = to_tensor_like(tau).clamp_min(eps)
+        tau_t = to_tensor_like(tau).clamp_min(eps)
 
         x = (kappa_t * tau_t).clamp_min(eps)
 
@@ -142,200 +144,249 @@ def sigma_bs_effective(
 
     return sigma_bs
 
-def heston_char_func(u, tau, S0, r, q, v0, kappa, theta, sigma, rho, j=2):
+
+# ============================================================
+# Heston pricing via the Fang–Oosterlee COS method
+# ============================================================
+
+
+def heston_char_func(u, T, r, q, kappa, theta, sigma, rho, v0, S0):
     """
-    Heston characteristic function - Little Heston Trap formulation.
-    j=1 for P1, j=2 for P2.
+    Heston characteristic function of X = log(S_T).
+
+    Uses the Albrecher et al. "Little Heston Trap" formulation for
+    numerical stability. Fully vectorized over complex frequencies ``u``.
     """
+    u = np.asarray(u, dtype=np.complex128)
     i = 1j
 
-    u1 = 0.5
-    u2 = -0.5
-    uj = u1 if j == 1 else u2
-
     a = kappa * theta
-    b = kappa
+    b = kappa - rho * sigma * i * u
+    d = np.sqrt(b * b + sigma * sigma * (i * u + u * u))
 
-    delta = b - rho * sigma * u * i
-    discriminant = delta**2 - sigma**2 * (2.0 * uj * u * i - u**2)
+    # Little Heston Trap: g = (b - d) / (b + d)
+    g = (b - d) / (b + d)
+    exp_dt = np.exp(-d * T)
 
-    d = np.sqrt(discriminant + 0j)
+    G = (1.0 - g * exp_dt) / (1.0 - g)
+    C = (r - q) * i * u * T + (a / (sigma * sigma)) * (
+        (b - d) * T - 2.0 * np.log(G)
+    )
+    D = ((b - d) / (sigma * sigma)) * ((1.0 - exp_dt) / (1.0 - g * exp_dt))
 
-    if np.abs(d) < 1e-10:
-        d = 1e-10 + 0j
-
-    denom = delta + d
-    if np.abs(denom) < 1e-12:
-        return 0.0 + 0j
-
-    g = (delta - d) / denom
-
-    exp_term = np.exp(-d * tau)
-    one_minus_g_exp = 1.0 - g * exp_term
-    one_minus_g = 1.0 - g
-
-    if np.abs(one_minus_g_exp) < 1e-12 or np.abs(one_minus_g) < 1e-12:
-        return 0.0 + 0j
-
-    D = ((delta - d) / sigma**2) * ((1.0 - exp_term) / one_minus_g_exp)
-
-    log_arg = one_minus_g_exp / one_minus_g
-    if np.abs(log_arg) < 1e-12:
-        return 0.0 + 0j
-
-    log_val = np.log(log_arg + 0j)
-
-    C = (r - q) * u * i * tau + (a / sigma**2) * ((delta - d) * tau - 2.0 * log_val)
-
-    cf = np.exp(C + D * v0 + i * u * np.log(S0))
-
-    if np.isnan(cf.real) or np.isnan(cf.imag) or np.isinf(cf.real) or np.isinf(cf.imag):
-        return 0.0 + 0j
-
-    return cf
+    return np.exp(C + D * v0 + i * u * np.log(S0))
 
 
-def heston_prob(j, S0, K, T, r, q, v0, kappa, theta, sigma, rho,
-                integration_limit=100.0, epsabs=1e-6, epsrel=1e-6, limit=200):
+def _heston_cumulants(T, r, q, kappa, theta, sigma, rho, v0):
     """
-    Compute Heston probability P1 or P2 by Gil-Pelaez inversion.
-    Returns:
-        Pj, integral_value, integral_abs_error
+    First two cumulants of X = log(S_T / S_0) under Heston.
+
+    Used to set the COS truncation interval [a, b].
     """
-    tau = T
-    logK = np.log(K)
-
-    def integrand(u):
-        if u < 1e-10:
-            return 0.0
-
-        cf = heston_char_func(u, tau, S0, r, q, v0, kappa, theta, sigma, rho, j=j)
-        val = np.exp(-1j * u * logK) * cf / (1j * u)
-        out = np.real(val)
-
-        if np.isnan(out) or np.isinf(out):
-            return 0.0
-        return out
-
-    integral, abs_err = quad(
-        integrand,
-        1e-8,
-        integration_limit,
-        limit=limit,
-        epsabs=epsabs,
-        epsrel=epsrel,
+    c1 = (
+        (r - q) * T
+        + (1.0 - np.exp(-kappa * T)) * (theta - v0) / (2.0 * kappa)
+        - 0.5 * theta * T
     )
 
-    Pj = 0.5 + integral / np.pi
-    Pj = np.clip(Pj, 0.0, 1.0)
+    exp_kt = np.exp(-kappa * T)
+    exp_2kt = np.exp(-2.0 * kappa * T)
+    sigma2 = sigma * sigma
+    kappa2 = kappa * kappa
+    kappa3 = kappa2 * kappa
 
-    return Pj, integral, abs_err
+    c2 = (1.0 / (8.0 * kappa3)) * (
+        sigma * T * kappa * exp_kt * (v0 - theta) * (8.0 * kappa * rho - 4.0 * sigma)
+        + kappa * rho * sigma * (1.0 - exp_kt) * (16.0 * theta - 8.0 * v0)
+        + 2.0 * theta * kappa * T * (-4.0 * kappa * rho * sigma + sigma2 + 4.0 * kappa2)
+        + sigma2
+        * (
+            (theta - 2.0 * v0) * exp_2kt
+            + theta * (6.0 * exp_kt - 7.0)
+            + 2.0 * v0
+        )
+        + 8.0 * kappa2 * (v0 - theta) * (1.0 - exp_kt)
+    )
+
+    return c1, max(float(c2), 1e-12)
+
+
+def _cos_chi_psi(a, b, c, d, k):
+    """
+    Analytic integrals χ_k(c,d) and ψ_k(c,d) for European payoffs
+    on the COS truncation interval [a, b].
+    """
+    k = np.asarray(k, dtype=np.float64)
+    omega = k * np.pi / (b - a)
+
+    chi = np.empty_like(omega, dtype=np.float64)
+    psi = np.empty_like(omega, dtype=np.float64)
+    mask0 = np.abs(omega) < 1e-14
+    mask = ~mask0
+
+    chi[mask0] = np.exp(d) - np.exp(c)
+    chi[mask] = (
+        1.0
+        / (1.0 + omega[mask] ** 2)
+        * (
+            np.cos(omega[mask] * (d - a)) * np.exp(d)
+            - np.cos(omega[mask] * (c - a)) * np.exp(c)
+            + omega[mask]
+            * (
+                np.sin(omega[mask] * (d - a)) * np.exp(d)
+                - np.sin(omega[mask] * (c - a)) * np.exp(c)
+            )
+        )
+    )
+
+    psi[mask0] = d - c
+    psi[mask] = (
+        1.0
+        / omega[mask]
+        * (np.sin(omega[mask] * (d - a)) - np.sin(omega[mask] * (c - a)))
+    )
+
+    return chi, psi
+
+
+def _cos_payoff_coefficients(a, b, K, call_put, N):
+    """Fourier-cosine coefficients V_k of the European payoff."""
+    k = np.arange(N, dtype=np.float64)
+    cp = call_put.lower()
+
+    if cp == "call":
+        # payoff K max(e^x - 1, 0) with x = log(S/K); support [0, b]
+        c, d = 0.0, b
+        chi, psi = _cos_chi_psi(a, b, c, d, k)
+        Uk = (2.0 / (b - a)) * K * (chi - psi)
+    elif cp == "put":
+        # support [a, 0]
+        c, d = a, 0.0
+        chi, psi = _cos_chi_psi(a, b, c, d, k)
+        Uk = (2.0 / (b - a)) * K * (-chi + psi)
+    else:
+        raise ValueError("call_put must be either 'Call' or 'Put'")
+
+    return Uk
 
 
 def heston_price(
-    S0, K, T, r, q, v0, kappa, theta, sigma, rho,
+    S0,
+    K,
+    T,
+    r,
+    q,
+    v0,
+    kappa,
+    theta,
+    sigma,
+    rho,
     call_put="Call",
-    integration_limit=100.0,
-    epsabs=1e-6,
-    epsrel=1e-6,
-    limit=200,
+    N=256,
+    L=10.0,
     verbose=False,
+    **_ignored,
 ):
     """
-    Heston European option price using Gil-Pelaez inversion.
+    Heston European option price via the Fang–Oosterlee COS method.
 
-    Supports both calls and puts.
-    Also reports numerical integration absolute error estimates from quad().
+    Parameters
+    ----------
+    S0, K, T, r, q : float
+        Spot, strike, maturity, risk-free rate, dividend yield.
+    v0, kappa, theta, sigma, rho : float
+        Heston parameters (initial variance, mean reversion, long-run
+        variance, vol-of-vol, correlation).
+    call_put : {"Call", "Put"}
+    N : int
+        Number of cosine terms (256 is typically enough for equity options).
+    L : float
+        Truncation-range multiplier in units of sqrt(c2).
+    verbose : bool
+        Print price and truncation diagnostics when True.
+    **_ignored
+        Accepted for backward compatibility with the old Gil-Pelaez kwargs
+        (``integration_limit``, ``epsabs``, ``epsrel``, ``limit``).
 
     Returns
     -------
     price : float
-    price_std_err : float
-        Error proxy from quad absolute error estimates, propagated to price.
-        This is not a statistical Monte Carlo standard error, but a useful
-        numerical integration uncertainty estimate.
+    truncation_halfwidth : float
+        Half-width of the COS truncation interval (diagnostic).
     diagnostics : dict
     """
     cp = call_put.lower()
     if cp not in {"call", "put"}:
         raise ValueError("call_put must be either 'Call' or 'Put'")
 
-    try:
-        P1, P1_int, P1_err = heston_prob(
-            1, S0, K, T, r, q, v0, kappa, theta, sigma, rho,
-            integration_limit=integration_limit, epsabs=epsabs, epsrel=epsrel, limit=limit
-        )
-        P2, P2_int, P2_err = heston_prob(
-            2, S0, K, T, r, q, v0, kappa, theta, sigma, rho,
-            integration_limit=integration_limit, epsabs=epsabs, epsrel=epsrel, limit=limit
-        )
-    except Exception as e:
-        if verbose:
-            print(f"Integration failed - returning NaN ({e})")
-        diagnostics = {
-            "P1": np.nan, "P2": np.nan,
-            "P1_integral": np.nan, "P2_integral": np.nan,
-            "P1_abs_error": np.nan, "P2_abs_error": np.nan,
-            "price_abs_error_proxy": np.nan,
-        }
-        return np.nan, np.nan, diagnostics
+    S0 = float(S0)
+    K = float(K)
+    T = float(T)
+    r = float(r)
+    q = float(q)
+    v0 = float(v0)
+    kappa = float(kappa)
+    theta = float(theta)
+    sigma = float(sigma)
+    rho = float(rho)
+    N = int(N)
+    L = float(L)
 
-    disc_q = np.exp(-q * T)
-    disc_r = np.exp(-r * T)
+    if T <= 0.0:
+        intrinsic = max(S0 - K, 0.0) if cp == "call" else max(K - S0, 0.0)
+        diagnostics = {"method": "intrinsic", "N": N, "a": np.nan, "b": np.nan}
+        return float(intrinsic), 0.0, diagnostics
 
-    call_price = disc_q * S0 * P1 - disc_r * K * P2
+    # Cumulants of log(S_T / S_0); shift by log(S0/K) for the x = log(S/K) grid
+    c1, c2 = _heston_cumulants(T, r, q, kappa, theta, sigma, rho, v0)
+    x = np.log(S0 / K)
+    a = (x + c1) - L * np.sqrt(c2)
+    b = (x + c1) + L * np.sqrt(c2)
 
-    # Put from put-call parity for European options
-    # C - P = S0 e^{-qT} - K e^{-rT}
-    if cp == "call":
-        price = call_price
-    else:
-        price = call_price - disc_q * S0 + disc_r * K
+    k = np.arange(N, dtype=np.float64)
+    u = k * np.pi / (b - a)
 
-    # Propagate quad absolute error estimates into a price error proxy.
-    # Since Pj = 0.5 + integral/pi, dPj error ~= err/pi.
-    P1_prob_err = P1_err / np.pi
-    P2_prob_err = P2_err / np.pi
+    # CF of log(S_T), then CF of x_T = log(S_T / K)
+    phi = heston_char_func(u, T, r, q, kappa, theta, sigma, rho, v0, S0)
+    phi_x = phi * np.exp(-1j * u * np.log(K))
 
-    # Conservative quadrature-combined price uncertainty
-    call_price_abs_err = np.sqrt(
-        (disc_q * S0 * P1_prob_err) ** 2 +
-        (disc_r * K * P2_prob_err) ** 2
-    )
+    Uk = _cos_payoff_coefficients(a, b, K, call_put=cp, N=N)
 
-    # Put via parity uses same quadrature uncertainty as call,
-    # since parity adjustment is deterministic.
-    price_abs_err = call_price_abs_err
+    # First term of the cosine series is halved
+    weights = np.ones(N)
+    weights[0] = 0.5
 
+    terms = weights * np.real(phi_x * np.exp(-1j * u * a) * Uk)
+    price = float(np.exp(-r * T) * np.sum(terms))
+    price = max(price, 0.0)
+
+    truncation_halfwidth = L * np.sqrt(c2)
     diagnostics = {
-        "P1": P1,
-        "P2": P2,
-        "P1_integral": P1_int,
-        "P2_integral": P2_int,
-        "P1_abs_error": P1_err,
-        "P2_abs_error": P2_err,
-        "P1_prob_abs_error": P1_prob_err,
-        "P2_prob_abs_error": P2_prob_err,
-        "call_price": call_price,
-        "price_abs_error_proxy": price_abs_err,
+        "method": "COS",
+        "N": N,
+        "L": L,
+        "a": a,
+        "b": b,
+        "c1": c1,
+        "c2": c2,
+        "x": x,
+        "truncation_halfwidth": truncation_halfwidth,
     }
 
     if verbose:
-        print(f"Heston {call_put} price: {price:.8f}")
-        print(f"quad abs error P1 integral: {P1_err:.3e}")
-        print(f"quad abs error P2 integral: {P2_err:.3e}")
-        print(f"price abs error proxy:      {price_abs_err:.3e}")
+        print(f"Heston {call_put} price (COS): {price:.8f}")
+        print(f"truncation interval: [{a:.4f}, {b:.4f}]  (N={N}, L={L})")
 
-    return price, price_abs_err, diagnostics
+    return price, truncation_halfwidth, diagnostics
 
 
 def heston_call_price(*args, **kwargs):
     kwargs["call_put"] = "Call"
-    price, price_err, diagnostics = heston_price(*args, **kwargs)
-    return price, price_err, diagnostics
+    price, trunc, diagnostics = heston_price(*args, **kwargs)
+    return price, trunc, diagnostics
 
 
 def heston_put_price(*args, **kwargs):
     kwargs["call_put"] = "Put"
-    price, price_err, diagnostics = heston_price(*args, **kwargs)
-    return price, price_err, diagnostics
+    price, trunc, diagnostics = heston_price(*args, **kwargs)
+    return price, trunc, diagnostics

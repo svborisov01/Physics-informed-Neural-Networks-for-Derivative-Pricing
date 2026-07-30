@@ -134,7 +134,7 @@ Legacy checkpoints cannot be loaded with the current code. `load_model` raises a
 │   ├── graphing_tools.py       # Convergence and 3D plots
 │   ├── analytical_pricing_tools.py  # BS and Heston COS ground truth
 │   ├── grid_based_pricing_tools.py  # FD Heston pricer (reference)
-│   └── monte_carlo_pricing_tools.py # MC Heston pricer (reference)
+│   └── monte_carlo_pricing_tools.py # Heston QE + Bergomi MC pricers
 ├── trained_models/             # Saved checkpoints (.pt)
 ├── graphs/                     # Pre-rendered comparison plots
 ├── demo_all_models.ipynb       # Clean demo of all three models via the wrapper
@@ -154,7 +154,19 @@ Heston models use a Black–Scholes baseline with effective volatility (`sigma_b
 Ground-truth Heston prices for testing use the **Fang–Oosterlee COS method** (`heston_price` in `analytical_pricing_tools.py`), not Gil-Pelaez quadrature.
 
 1-factor Bergomi uses the same BS-correction pattern with OU factor \(X\)
-(`sigma_bs_bergomi`, default `flat_fwd`). Benchmark with Monte Carlo (no closed form yet).
+(`sigma_bs_bergomi`, default `flat_fwd`). Ground truth for testing is
+**Monte Carlo** via `Bergomi_Monte_Carlo` in `monte_carlo_pricing_tools.py`.
+
+```python
+from support_tools.monte_carlo_pricing_tools import Bergomi_Monte_Carlo
+
+price, se = Bergomi_Monte_Carlo(
+    S0=100, K=100, T=1.0, r=0.05, q=0.0,
+    xi0=0.04, omega=1.0, kappa=2.0, rho=-0.5,
+    n_paths=100_000, n_steps=100, stationary=True,
+    seed=42, return_stderr=True,
+)
+```
 
 ```python
 from pricing.bergomi_option_pricing import PINN, train_network

@@ -297,9 +297,25 @@ def _analytical_price(
     call_put = getattr(pinn, "call_put", "Call")
 
     if model_type == ModelType.BERGOMI:
-        raise NotImplementedError(
-            "Analytical Bergomi pricing is not available. "
-            "Benchmark against Monte Carlo instead of run_slice_test."
+        from support_tools.monte_carlo_pricing_tools import Bergomi_Monte_Carlo
+
+        return Bergomi_Monte_Carlo(
+            S0=spot,
+            K=K,
+            T=tau,
+            r=params["r"],
+            q=params.get("q", 0.0),
+            xi0=params["xi0"],
+            omega=params["omega"],
+            kappa=params["kappa"],
+            rho=params["rho"],
+            X0=params.get("X", params.get("X0", 0.0)),
+            call_put=call_put,
+            n_paths=int(params.get("n_mc_paths", 20_000)),
+            n_steps=int(params.get("n_mc_steps", 100)),
+            stationary=params.get("stationary", True),
+            seed=params.get("mc_seed", None),
+            return_stderr=False,
         )
 
     if model_type == ModelType.HESTON:
@@ -393,6 +409,10 @@ def get_default_test_params(pinn: nn.Module, metadata: Optional[dict] = None) ->
             "s_min": 50.0,
             "s_max": 200.0,
             "s_step": 5.0,
+            "n_mc_paths": 20_000,
+            "n_mc_steps": 100,
+            "mc_seed": 42,
+            "q": 0.0,
         }
 
     sigma_mode = metadata.get("sigma_mode", "mean_reverting")
@@ -421,23 +441,18 @@ def run_slice_test(
     **kwargs,
 ) -> Optional[Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]]:
     """
-    Run a 2D (S, tau) accuracy test against analytical pricing.
+    Run a 2D (S, tau) accuracy test against a ground-truth pricer.
 
-    Automatically selects the correct ground truth and prediction API
-    based on model type. Pass model-specific parameters via kwargs or
-    rely on defaults from ``get_default_test_params``.
+    Automatically selects the correct benchmark and prediction API
+    based on model type (analytical BS / Heston COS / Bergomi MC).
+    Pass model-specific parameters via kwargs or rely on defaults from
+    ``get_default_test_params``.
 
     Returns
     -------
     (spot_grid, tau_grid, mse_grid, pinn_prices, anal_prices) when
     return_values=True, else None.
     """
-    if detect_model_type(pinn) == ModelType.BERGOMI:
-        raise NotImplementedError(
-            "run_slice_test requires an analytical benchmark. "
-            "For Bergomi, compare predict_price against Monte Carlo."
-        )
-
     defaults = get_default_test_params(pinn)
     params = {**defaults, **kwargs}
 
@@ -448,6 +463,10 @@ def run_slice_test(
     s_min = params.pop("s_min")
     s_max = params.pop("s_max")
     s_step = params.pop("s_step")
+
+    # MC-only kwargs must not be forwarded to predict_price
+    mc_keys = ("n_mc_paths", "n_mc_steps", "mc_seed", "q", "X0")
+    predict_params = {k: v for k, v in params.items() if k not in mc_keys}
 
     model_type = detect_model_type(pinn)
     device = next(pinn.parameters()).device
@@ -461,7 +480,7 @@ def run_slice_test(
     for spot in spot_grid:
         row_mse, row_pinn, row_anal = [], [], []
         for tau_val in tau_grid:
-            price_pinn_t = predict_price(pinn, S=spot, K=K, tau=tau_val, **params)
+            price_pinn_t = predict_price(pinn, S=spot, K=K, tau=tau_val, **predict_params)
             price_pinn = float(price_pinn_t.detach().cpu().reshape(-1)[0])
 
             price_analytical = _analytical_price(

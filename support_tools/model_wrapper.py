@@ -548,8 +548,11 @@ def compute_greeks(
     """
     Compute price, Delta (∂V/∂S), and Theta (∂V/∂t) via autograd.
 
-    Works for two_d and hd models. For heston, pass fixed market parameters
-    via kwargs (v, r, kappa, theta, sigma, rho, sigma_mode).
+    Extra kwargs by model type:
+      - two_d   : none
+      - hd      : r, sigma
+      - heston  : v, r, kappa, theta, sigma, rho, sigma_mode
+      - bergomi : X, r, xi0, omega, kappa, rho, sigma_mode, stationary
 
     Returns
     -------
@@ -600,6 +603,43 @@ def compute_greeks(
         U = pinn.forward_x(x_t, v_t, tau_t, r_t, kappa_t, theta_t, sigma_t, rho_t)
         sigma_bs = sigma_bs_effective(
             v=v_t, theta=theta_t, kappa=kappa_t, tau=tau_t, mode=sigma_mode
+        )
+        u_bs = bs_option_normalized_from_x(
+            x=x_t, tau=tau_t, r=r_t, sigma_bs=sigma_bs, call_put=pinn.call_put
+        )
+        u = u_bs + U
+    elif model_type == ModelType.BERGOMI:
+        from support_tools.analytical_pricing_tools import bs_option_normalized_from_x
+        from pricing.bergomi_option_pricing import v_bergomi, sigma_bs_bergomi
+
+        X = kwargs["X"]
+        r = kwargs["r"]
+        xi0 = kwargs["xi0"]
+        omega = kwargs["omega"]
+        kappa = kwargs["kappa"]
+        rho = kwargs["rho"]
+        sigma_mode = kwargs.get("sigma_mode", "flat_fwd")
+        stationary = kwargs.get("stationary", True)
+
+        X_t = torch.full_like(S_t, X)
+        r_t = torch.full_like(S_t, r)
+        xi0_t = torch.full_like(S_t, xi0)
+        omega_t = torch.full_like(S_t, omega)
+        kappa_t = torch.full_like(S_t, kappa)
+        rho_t = torch.full_like(S_t, rho)
+
+        eps = 1e-8
+        x_t = torch.log(torch.clamp(S_t, min=eps) / torch.clamp(K_t, min=eps))
+        U = pinn.forward_x(
+            x_t, X_t, tau_t, r_t, xi0_t, omega_t, kappa_t, rho_t
+        )
+
+        t = None if stationary else (pinn.T - tau_t).clamp_min(0.0)
+        v = v_bergomi(
+            X_t, xi0_t, omega_t, kappa_t, t=t, stationary=stationary
+        )
+        sigma_bs = sigma_bs_bergomi(
+            xi0=xi0_t, v=v, tau=tau_t, mode=sigma_mode
         )
         u_bs = bs_option_normalized_from_x(
             x=x_t, tau=tau_t, r=r_t, sigma_bs=sigma_bs, call_put=pinn.call_put

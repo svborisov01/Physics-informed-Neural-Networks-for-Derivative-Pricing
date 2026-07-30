@@ -86,7 +86,7 @@ pinn = PINN(x_min=-5, x_max=5, T=4.0, r=0.05, sigma=0.2, hidden=50, depth=5).to(
 history = train_network(pinn, epochs=5000, best_model_path="trained_models/my_model.pt")
 ```
 
-See **`demo_all_models.ipynb`** for a clean walkthrough of all three models (load → price → test → visualize → Greeks).  
+See **`demo_all_models.ipynb`** for a walkthrough of all models including Bergomi (load/train → price → MC test → visualize → Greeks).  
 See `demo notebook.ipynb` for full training, comparison, and architecture-search workflows.
 
 ## Universal Wrapper API

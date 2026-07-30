@@ -130,7 +130,7 @@ Legacy checkpoints cannot be loaded with the current code. `load_model` raises a
 │   ├── model_wrapper.py        # Universal load / test / visualize API
 │   ├── testing_tools.py        # Legacy test wrappers
 │   ├── graphing_tools.py       # Convergence and 3D plots
-│   ├── analytical_pricing_tools.py  # BS and Heston ground truth
+│   ├── analytical_pricing_tools.py  # BS and Heston COS ground truth
 │   ├── grid_based_pricing_tools.py  # FD Heston pricer (reference)
 │   └── monte_carlo_pricing_tools.py # MC Heston pricer (reference)
 ├── trained_models/             # Saved checkpoints (.pt)
@@ -148,6 +148,8 @@ Legacy checkpoints cannot be loaded with the current code. `load_model` raises a
 - **Normalization**: Prices in \(u = V/K\), inputs scaled by domain bounds
 
 Heston models use a Black–Scholes baseline with effective volatility (`sigma_bs_effective`) and learn only the correction term \(U\).
+
+Ground-truth Heston prices for testing use the **Fang–Oosterlee COS method** (`heston_price` in `analytical_pricing_tools.py`), not Gil-Pelaez quadrature.
 
 ## Known Limitations
 

@@ -157,6 +157,7 @@ Ground-truth Heston prices for testing use the **Fang–Oosterlee COS method** (
 - Greek comparison (`compare_greeks`) is defined for Black–Scholes models only
 - Three legacy checkpoints use outdated input feature sets and cannot be loaded
 - Runs assume execution from the repository root (no pip-installable package yet)
+- 1-factor Bergomi PINN is designed but not yet implemented — see [`docs/bergomi_1factor_pde.md`](docs/bergomi_1factor_pde.md)
 
 ## License
 

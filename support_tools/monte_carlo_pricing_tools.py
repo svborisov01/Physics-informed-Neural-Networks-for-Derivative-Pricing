@@ -1,5 +1,6 @@
 import numpy as np
 
+
 def Heston_Monte_Carlo(
     S0,
     K,
@@ -144,11 +145,11 @@ def Heston_Monte_Carlo(
         v = v_next_clip
 
     ST = np.exp(x)
-    if call_put == "Call":
+    if call_put.lower() == "call":
         payoff = np.maximum(ST - K, 0.0)
     else:
         payoff = np.maximum(K - ST, 0.0)
-        
+
     disc_payoff = np.exp(-r * T) * payoff
 
     price = disc_payoff.mean()
@@ -158,3 +159,237 @@ def Heston_Monte_Carlo(
         return price, stderr
 
     return price
+
+
+# ============================================================
+# 1-factor Bergomi Monte Carlo
+# ============================================================
+
+
+def _v_bergomi_np(X, xi0, omega, kappa, t=None, stationary=True, eps=1e-12):
+    """Numpy instantaneous variance under 1-factor Bergomi (flat xi0)."""
+    X = np.asarray(X, dtype=np.float64)
+    xi0 = np.maximum(float(xi0), eps)
+    omega = float(omega)
+    kappa = max(float(kappa), eps)
+
+    if stationary or t is None:
+        expo = omega * X - (omega ** 2) / (4.0 * kappa)
+    else:
+        t = np.asarray(t, dtype=np.float64)
+        expo = omega * X - (omega ** 2) / (4.0 * kappa) * (
+            1.0 - np.exp(-2.0 * kappa * t)
+        )
+
+    return np.maximum(xi0 * np.exp(expo), eps)
+
+
+def Bergomi_Monte_Carlo(
+    S0,
+    K,
+    T,
+    r,
+    q,
+    xi0,
+    omega,
+    kappa,
+    rho,
+    X0=0.0,
+    call_put="Call",
+    n_paths=200_000,
+    n_steps=200,
+    stationary=True,
+    seed=None,
+    return_stderr=False,
+    return_paths=False,
+):
+    """
+    Monte Carlo pricer for a European option under the 1-factor Bergomi model.
+
+    Dynamics (risk-neutral):
+        dS_t / S_t = (r - q) dt + sqrt(v_t) dW^S_t
+        dX_t       = -kappa X_t dt + dW^X_t
+        d<W^S, W^X>_t = rho dt
+
+    Instantaneous variance with flat initial forward variance xi0:
+
+        v(t, X) = xi0 * exp( omega*X - (omega^2/(4*kappa))*(1 - exp(-2*kappa*t)) )
+
+    or the stationary approximation (``stationary=True``, default):
+
+        v(X) = xi0 * exp( omega*X - omega^2/(4*kappa) )
+
+    Simulation scheme
+    -----------------
+    - Exact Gaussian transition for the OU factor X.
+    - Log-Euler step for S with Brownian correlated to the OU innovation
+      (same correlation structure as the pricing PDE).
+
+    Parameters
+    ----------
+    S0, K, T, r, q : float
+        Spot, strike, maturity, rate, dividend yield.
+    xi0 : float
+        Initial flat forward variance.
+    omega : float
+        Vol-of-variance (Bergomi).
+    kappa : float
+        Mean-reversion speed of X.
+    rho : float
+        Spot–factor correlation in (-1, 1).
+    X0 : float
+        Initial OU factor (typically 0).
+    call_put : {"Call", "Put"}
+    n_paths, n_steps : int
+    stationary : bool
+        Use stationary variance formula if True.
+    seed : int or None
+    return_stderr : bool
+        Also return MC standard error.
+    return_paths : bool
+        If True, also return terminal spot and factor arrays.
+
+    Returns
+    -------
+    price : float
+    stderr : float, optional
+    (ST, XT) : tuple of ndarray, optional
+        Only if ``return_paths=True`` (appended after price / stderr).
+    """
+    cp = call_put.lower()
+    if cp not in {"call", "put"}:
+        raise ValueError("call_put must be either 'Call' or 'Put'")
+    if not (-1.0 < rho < 1.0):
+        raise ValueError("rho must lie strictly inside (-1, 1)")
+    if T <= 0.0:
+        intrinsic = max(S0 - K, 0.0) if cp == "call" else max(K - S0, 0.0)
+        if return_stderr and return_paths:
+            return float(intrinsic), 0.0, (np.full(n_paths, S0), np.full(n_paths, X0))
+        if return_stderr:
+            return float(intrinsic), 0.0
+        if return_paths:
+            return float(intrinsic), (np.full(n_paths, S0), np.full(n_paths, X0))
+        return float(intrinsic)
+
+    rng = np.random.default_rng(seed)
+
+    dt = T / n_steps
+    sqrt_dt = np.sqrt(dt)
+    exp_kdt = np.exp(-kappa * dt)
+
+    # Exact conditional std of OU increment:
+    # X_{t+dt} = e^{-kappa dt} X_t + sqrt( (1 - e^{-2 kappa dt}) / (2 kappa) ) Z
+    if kappa > 1e-12:
+        ou_std = np.sqrt(max((1.0 - np.exp(-2.0 * kappa * dt)) / (2.0 * kappa), 0.0))
+    else:
+        ou_std = sqrt_dt
+
+    rho_perp = np.sqrt(max(1.0 - rho * rho, 0.0))
+
+    log_S = np.full(n_paths, np.log(S0), dtype=np.float64)
+    X = np.full(n_paths, float(X0), dtype=np.float64)
+    t = 0.0
+
+    for _ in range(n_steps):
+        # Variance at the left endpoint of the step
+        v = _v_bergomi_np(
+            X, xi0=xi0, omega=omega, kappa=kappa, t=t, stationary=stationary
+        )
+        sqrt_v = np.sqrt(v)
+
+        z_X = rng.standard_normal(n_paths)
+        z_perp = rng.standard_normal(n_paths)
+        z_S = rho * z_X + rho_perp * z_perp
+
+        # Exact OU step for the factor
+        X = exp_kdt * X + ou_std * z_X
+
+        # Log-Euler step for the spot
+        log_S = log_S + (r - q - 0.5 * v) * dt + sqrt_v * sqrt_dt * z_S
+        t += dt
+
+    ST = np.exp(log_S)
+    if cp == "call":
+        payoff = np.maximum(ST - K, 0.0)
+    else:
+        payoff = np.maximum(K - ST, 0.0)
+
+    disc_payoff = np.exp(-r * T) * payoff
+    price = float(disc_payoff.mean())
+
+    out = [price]
+    if return_stderr:
+        stderr = float(disc_payoff.std(ddof=1) / np.sqrt(n_paths))
+        out.append(stderr)
+    if return_paths:
+        out.append((ST, X))
+
+    if len(out) == 1:
+        return out[0]
+    return tuple(out)
+
+
+def bergomi_mc_grid(
+    S_grid,
+    tau_grid,
+    K,
+    r,
+    q,
+    xi0,
+    omega,
+    kappa,
+    rho,
+    X0=0.0,
+    call_put="Call",
+    n_paths=50_000,
+    n_steps=100,
+    stationary=True,
+    seed=42,
+):
+    """
+    Price a European option on a (S, tau) grid via Bergomi Monte Carlo.
+
+    Returns
+    -------
+    prices : ndarray, shape (len(S_grid), len(tau_grid))
+    stderrs : ndarray, same shape
+    """
+    S_grid = np.asarray(S_grid, dtype=np.float64)
+    tau_grid = np.asarray(tau_grid, dtype=np.float64)
+    prices = np.empty((S_grid.size, tau_grid.size), dtype=np.float64)
+    stderrs = np.empty_like(prices)
+
+    # Independent seeds per cell for reproducibility without shared RNG state
+    ss = np.random.SeedSequence(seed)
+    child_seeds = ss.spawn(S_grid.size * tau_grid.size)
+    k = 0
+    for i, S0 in enumerate(S_grid):
+        for j, tau in enumerate(tau_grid):
+            # Scale steps roughly with maturity
+            steps = max(
+                int(round(n_steps * max(tau, 1e-6) / max(float(tau_grid.max()), 1e-6))),
+                10,
+            )
+            p, se = Bergomi_Monte_Carlo(
+                S0=float(S0),
+                K=K,
+                T=float(tau),
+                r=r,
+                q=q,
+                xi0=xi0,
+                omega=omega,
+                kappa=kappa,
+                rho=rho,
+                X0=X0,
+                call_put=call_put,
+                n_paths=n_paths,
+                n_steps=steps,
+                stationary=stationary,
+                seed=child_seeds[k],
+                return_stderr=True,
+            )
+            prices[i, j] = p
+            stderrs[i, j] = se
+            k += 1
+
+    return prices, stderrs

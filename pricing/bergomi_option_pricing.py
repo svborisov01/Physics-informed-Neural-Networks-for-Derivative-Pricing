@@ -53,6 +53,7 @@ def v_bergomi(
     t=None,
     stationary: bool = True,
     eps: float = 1e-8,
+    v_max: float | None = None,
 ):
     """
     Instantaneous variance under 1-factor Bergomi with flat initial curve.
@@ -67,6 +68,8 @@ def v_bergomi(
         Calendar time. Ignored when ``stationary=True``.
     stationary : bool
         If True, use Var_infty(X) = 1/(2 kappa).
+    v_max : float or None
+        Optional upper clamp on variance (stabilizes training).
     """
     if not isinstance(X, torch.Tensor):
         X = torch.tensor(X, dtype=torch.float32)
@@ -78,7 +81,8 @@ def v_bergomi(
 
     xi0_t = _like(xi0).clamp_min(eps)
     omega_t = _like(omega)
-    kappa_t = _like(kappa).clamp_min(eps)
+    # Floor kappa so the stationary compensator omega^2/(4 kappa) stays finite
+    kappa_t = _like(kappa).clamp_min(max(eps, 1e-3))
 
     if stationary or t is None:
         expo = omega_t * X - (omega_t ** 2) / (4.0 * kappa_t)
@@ -88,7 +92,12 @@ def v_bergomi(
             1.0 - torch.exp(-2.0 * kappa_t * t_t)
         )
 
-    return (xi0_t * torch.exp(expo)).clamp_min(eps)
+    # Cap the exponent to avoid overflow before clamping v
+    expo = expo.clamp(min=-20.0, max=20.0)
+    v = (xi0_t * torch.exp(expo)).clamp_min(eps)
+    if v_max is not None:
+        v = v.clamp_max(float(v_max))
+    return v
 
 
 def sigma_bs_bergomi(
@@ -104,8 +113,8 @@ def sigma_bs_bergomi(
 
     Modes
     -----
-    flat_fwd : sigma = sqrt(xi0)   (recommended default; exact as omega -> 0)
-    spot_var : sigma = sqrt(v)
+    flat_fwd : sigma = sqrt(xi0)   (exact Black–Scholes limit as omega -> 0)
+    spot_var : sigma = sqrt(v)     (default for PINN training; better ATM baseline)
     hybrid   : blend flat_fwd and spot_var with tau-dependent weight
     """
     if not isinstance(xi0, torch.Tensor):
@@ -149,46 +158,62 @@ def sigma_bs_bergomi(
 
 
 def _sample_interior(pinn, N_points):
-    """Sample (x, X, tau, r, xi0, omega, kappa, rho) in the training domain."""
+    """
+    Sample (x, X, tau, r, xi0, omega, kappa, rho) in the training domain.
+
+    Only (x, X, tau) require gradients for the PDE operator. The OU factor X is
+    drawn from a truncated stationary Gaussian N(0, 1/(2 kappa)) so that the
+    implied variance v(X) stays in a realistic range (unlike uniform X x omega
+    sampling, which produced v up to O(10-100) and broke training).
+    """
     device = next(pinn.parameters()).device
     dtype = next(pinn.parameters()).dtype
 
-    x = (
-        pinn.x_min
-        + (pinn.x_max - pinn.x_min) * torch.rand(N_points, 1, device=device, dtype=dtype)
-    ).requires_grad_(True)
+    # Mean-reversion with a meaningful floor (avoids omega^2/(4 kappa) blow-ups)
+    kappa_floor = float(getattr(pinn, "kappa_floor", 0.25))
+    kappa_floor = min(kappa_floor, 0.99 * float(pinn.kappa_max))
+    kappa_floor = max(kappa_floor, 1e-3)
+    kappa = kappa_floor + (pinn.kappa_max - kappa_floor) * torch.rand(
+        N_points, 1, device=device, dtype=dtype
+    )
 
-    X = (
-        -pinn.X_max
-        + 2.0 * pinn.X_max * torch.rand(N_points, 1, device=device, dtype=dtype)
-    ).requires_grad_(True)
+    # Stationary OU scale: std = 1/sqrt(2 kappa)
+    ou_std = 1.0 / torch.sqrt(2.0 * kappa)
+    X = (ou_std * torch.randn(N_points, 1, device=device, dtype=dtype)).clamp(
+        -pinn.X_max, pinn.X_max
+    )
+
+    # Oversample near ATM (x≈0): absolute pricing error and payoff kink concentrate there
+    n_atm = N_points // 2
+    n_unif = N_points - n_atm
+    x_unif = pinn.x_min + (pinn.x_max - pinn.x_min) * torch.rand(
+        n_unif, 1, device=device, dtype=dtype
+    )
+    x_atm = (0.15 * torch.randn(n_atm, 1, device=device, dtype=dtype)).clamp(
+        pinn.x_min, pinn.x_max
+    )
+    x = torch.cat([x_unif, x_atm], dim=0)
+
+    # Shuffle so PDE / BC batches are mixed (keep X paired with its kappa)
+    perm = torch.randperm(N_points, device=device)
+    x = x[perm].detach().requires_grad_(True)
+    X = X[perm].detach().requires_grad_(True)
+    kappa = kappa[perm]
 
     tau = (
         1e-4 + (pinn.T - 1e-4) * torch.rand(N_points, 1, device=device, dtype=dtype)
     ).requires_grad_(True)
 
-    r = (
-        1e-4 + (pinn.r_max - 1e-4) * torch.rand(N_points, 1, device=device, dtype=dtype)
-    ).requires_grad_(True)
-
-    xi0 = (
-        1e-4
-        + (pinn.xi0_max - 1e-4) * torch.rand(N_points, 1, device=device, dtype=dtype)
-    ).requires_grad_(True)
-
-    omega = (
-        1e-4
-        + (pinn.omega_max - 1e-4) * torch.rand(N_points, 1, device=device, dtype=dtype)
-    ).requires_grad_(True)
-
-    kappa = (
-        1e-4
-        + (pinn.kappa_max - 1e-4) * torch.rand(N_points, 1, device=device, dtype=dtype)
-    ).requires_grad_(True)
-
-    rho = (
-        -0.95 + 1.90 * torch.rand(N_points, 1, device=device, dtype=dtype)
-    ).requires_grad_(True)
+    r = 1e-4 + (pinn.r_max - 1e-4) * torch.rand(
+        N_points, 1, device=device, dtype=dtype
+    )
+    xi0 = 1e-4 + (pinn.xi0_max - 1e-4) * torch.rand(
+        N_points, 1, device=device, dtype=dtype
+    )
+    omega = 1e-4 + (pinn.omega_max - 1e-4) * torch.rand(
+        N_points, 1, device=device, dtype=dtype
+    )
+    rho = -0.95 + 1.90 * torch.rand(N_points, 1, device=device, dtype=dtype)
 
     return x, X, tau, r, xi0, omega, kappa, rho
 
@@ -203,7 +228,15 @@ def _total_price(pinn, x, X, tau, r, xi0, omega, kappa, rho, sigma_mode, station
         # Convention: option issued at calendar t=0 with maturity pinn.T
         t = (pinn.T - tau).clamp_min(0.0)
 
-    v = v_bergomi(X, xi0, omega, kappa, t=t, stationary=stationary)
+    v = v_bergomi(
+        X,
+        xi0,
+        omega,
+        kappa,
+        t=t,
+        stationary=stationary,
+        v_max=getattr(pinn, "v_max", 1.0),
+    )
     sigma_bs = sigma_bs_bergomi(xi0=xi0, v=v, tau=tau, mode=sigma_mode)
     u_bs = bs_option_normalized_from_x(
         x=x, tau=tau, r=r, sigma_bs=sigma_bs, call_put=pinn.call_put
@@ -219,7 +252,7 @@ def _total_price(pinn, x, X, tau, r, xi0, omega, kappa, rho, sigma_mode, station
 def pde_dynamic_x(
     pinn,
     N_points=5000,
-    sigma_mode="flat_fwd",
+    sigma_mode="spot_var",
     stationary=True,
     detach_source=False,
 ):
@@ -264,7 +297,7 @@ def pde_dynamic_x(
 def spot_terminal_condition_x(
     pinn,
     N_points=2000,
-    sigma_mode="flat_fwd",
+    sigma_mode="spot_var",
     stationary=True,
 ):
     """Terminal payoff loss at tau = 0."""
@@ -282,7 +315,15 @@ def spot_terminal_condition_x(
     else:
         t = torch.full_like(x, float(pinn.T))
 
-    v = v_bergomi(X, xi0, omega, kappa, t=t, stationary=stationary)
+    v = v_bergomi(
+        X,
+        xi0,
+        omega,
+        kappa,
+        t=t,
+        stationary=stationary,
+        v_max=getattr(pinn, "v_max", 1.0),
+    )
     sigma_bs = sigma_bs_bergomi(xi0=xi0, v=v, tau=tau_safe, mode=sigma_mode)
     u_bs = bs_option_normalized_from_x(
         x=x, tau=tau_safe, r=r, sigma_bs=sigma_bs, call_put=pinn.call_put
@@ -303,7 +344,7 @@ def spot_terminal_condition_x(
 def spot_boundary_conditions_x(
     pinn,
     N_points=2000,
-    sigma_mode="flat_fwd",
+    sigma_mode="spot_var",
     stationary=True,
     lambda_price_low=1.0,
     lambda_delta_low=0.0,
@@ -395,6 +436,8 @@ class PINN(nn.Module):
         call_put="Call",
         hidden=128,
         depth=4,
+        v_max=1.0,
+        kappa_floor=0.25,
     ):
         super().__init__()
 
@@ -408,6 +451,8 @@ class PINN(nn.Module):
         self.xi0_max = float(xi0_max)
         self.omega_max = float(omega_max)
         self.kappa_max = float(kappa_max)
+        self.v_max = float(v_max)
+        self.kappa_floor = float(kappa_floor)
         self.call_put = call_put
         self.depth = depth
         self.hidden = hidden
@@ -492,8 +537,11 @@ class PINN(nn.Module):
     def forward_x(self, x, X, tau, r, xi0, omega, kappa, rho):
         features = self._features_from_x(x, X, tau, r, xi0, omega, kappa, rho)
         raw = self.net(features)
-        corr_scale = 2.0 * (1.0 + torch.abs(x)) * (1.0 + tau / self.T)
-        return corr_scale * torch.tanh(raw)
+        # Keep U small vs the BS baseline. Gate by omega so U -> 0 as omega -> 0
+        # (Bergomi collapses to Black–Scholes when vol-of-variance vanishes).
+        omega_gate = (omega / max(self.omega_max, 1e-6)).clamp(0.0, 1.0)
+        corr_scale = 0.15 * (0.5 + tau / self.T) * (1.0 + 0.25 * torch.abs(x))
+        return omega_gate * corr_scale * torch.tanh(raw)
 
     def forward(self, S, K, X, tau, r, xi0, omega, kappa, rho):
         eps = 1e-8
@@ -530,7 +578,7 @@ class PINN(nn.Module):
         omega,
         kappa,
         rho,
-        sigma_mode="flat_fwd",
+        sigma_mode="spot_var",
         stationary=True,
     ):
         device = next(self.parameters()).device
@@ -553,7 +601,13 @@ class PINN(nn.Module):
             )
             t = None if stationary else (self.T - tau_t).clamp_min(0.0)
             v = v_bergomi(
-                X_t, xi0_t, omega_t, kappa_t, t=t, stationary=stationary
+                X_t,
+                xi0_t,
+                omega_t,
+                kappa_t,
+                t=t,
+                stationary=stationary,
+                v_max=getattr(self, "v_max", None),
             )
             sigma_bs = sigma_bs_bergomi(
                 xi0=xi0_t, v=v, tau=tau_t, mode=sigma_mode
@@ -578,7 +632,7 @@ class PINN(nn.Module):
         omega,
         kappa,
         rho,
-        sigma_mode="flat_fwd",
+        sigma_mode="spot_var",
         stationary=True,
     ):
         device = next(self.parameters()).device
@@ -610,10 +664,10 @@ def train_network(
     N_boundary=2000,
     epochs=5000,
     lr=1e-4,
-    sigma_mode="flat_fwd",
+    sigma_mode="spot_var",
     stationary=True,
     lambda_boundary=1.0,
-    lambda_terminal=0.5,
+    lambda_terminal=1.0,
     grad_clip=1.0,
     print_every=100,
     best_model_path="best_pinn_bergomi_xspace.pt",
@@ -753,6 +807,8 @@ def train_network(
                         "xi0_max": getattr(pinn, "xi0_max", None),
                         "omega_max": getattr(pinn, "omega_max", None),
                         "kappa_max": getattr(pinn, "kappa_max", None),
+                        "v_max": getattr(pinn, "v_max", None),
+                        "kappa_floor": getattr(pinn, "kappa_floor", None),
                         "hidden": pinn.hidden,
                         "depth": pinn.depth,
                     },

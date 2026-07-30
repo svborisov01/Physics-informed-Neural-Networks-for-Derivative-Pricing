@@ -166,12 +166,12 @@ def Heston_Monte_Carlo(
 # ============================================================
 
 
-def _v_bergomi_np(X, xi0, omega, kappa, t=None, stationary=True, eps=1e-12):
+def _v_bergomi_np(X, xi0, omega, kappa, t=None, stationary=True, eps=1e-12, v_max=None):
     """Numpy instantaneous variance under 1-factor Bergomi (flat xi0)."""
     X = np.asarray(X, dtype=np.float64)
     xi0 = np.maximum(float(xi0), eps)
     omega = float(omega)
-    kappa = max(float(kappa), eps)
+    kappa = max(float(kappa), max(eps, 1e-3))
 
     if stationary or t is None:
         expo = omega * X - (omega ** 2) / (4.0 * kappa)
@@ -181,7 +181,11 @@ def _v_bergomi_np(X, xi0, omega, kappa, t=None, stationary=True, eps=1e-12):
             1.0 - np.exp(-2.0 * kappa * t)
         )
 
-    return np.maximum(xi0 * np.exp(expo), eps)
+    expo = np.clip(expo, -20.0, 20.0)
+    v = np.maximum(xi0 * np.exp(expo), eps)
+    if v_max is not None:
+        v = np.minimum(v, float(v_max))
+    return v
 
 
 def Bergomi_Monte_Carlo(

@@ -3,9 +3,10 @@ Universal wrapper for PINN option-pricing models.
 
 Provides a single interface for loading checkpoints, running accuracy tests,
 visualizing results, and computing Greeks across all supported model types:
-  - two_d  : fixed-parameter Black–Scholes (2 inputs: x, tau)
-  - hd     : variable r, sigma Black–Scholes (4 inputs: x, tau, r, sigma)
-  - heston : Heston correction model (price = u_bs + U)
+  - two_d   : fixed-parameter Black–Scholes (2 inputs: x, tau)
+  - hd      : variable r, sigma Black–Scholes (4 inputs: x, tau, r, sigma)
+  - heston  : Heston correction model (price = u_bs + U)
+  - bergomi : 1-factor Bergomi correction model (price = u_bs + U)
 """
 
 from __future__ import annotations
@@ -29,6 +30,7 @@ class ModelType(str, Enum):
     TWO_D = "two_d"
     HD = "hd"
     HESTON = "heston"
+    BERGOMI = "bergomi"
 
 
 # Known architecture overrides for bundled checkpoints (hidden, depth).
@@ -45,6 +47,8 @@ LEGACY_CHECKPOINTS = {"hd.pt", "heston.pt", "wide_moneyness_heston.pt"}
 
 def detect_model_type(pinn: nn.Module) -> ModelType:
     """Detect model type from a PINN instance."""
+    if hasattr(pinn, "X_max") and hasattr(pinn, "xi0_max"):
+        return ModelType.BERGOMI
     if hasattr(pinn, "v_max") and hasattr(pinn, "kappa_max"):
         return ModelType.HESTON
     if hasattr(pinn, "r_max") and hasattr(pinn, "sigma_max"):
@@ -53,12 +57,15 @@ def detect_model_type(pinn: nn.Module) -> ModelType:
         return ModelType.TWO_D
     raise ValueError(
         "Cannot detect model type. Expected a PINN from "
-        "two_d_option_pricing, hd_option_pricing, or heston_option_pricing."
+        "two_d_option_pricing, hd_option_pricing, heston_option_pricing, "
+        "or bergomi_option_pricing."
     )
 
 
 def detect_model_type_from_checkpoint(ckpt: dict) -> ModelType:
     """Detect model type from checkpoint metadata."""
+    if "X_max" in ckpt and "xi0_max" in ckpt:
+        return ModelType.BERGOMI
     if "v_max" in ckpt and "kappa_max" in ckpt:
         return ModelType.HESTON
     if "r_max" in ckpt and "sigma_max" in ckpt:
@@ -116,6 +123,23 @@ def _build_pinn(model_type: ModelType, ckpt: dict, hidden: int, depth: int) -> n
             T=ckpt["T"],
             r_max=ckpt["r_max"],
             sigma_max=ckpt["sigma_max"],
+            call_put=call_put,
+            hidden=hidden,
+            depth=depth,
+        )
+
+    if model_type == ModelType.BERGOMI:
+        from pricing.bergomi_option_pricing import PINN
+
+        return PINN(
+            x_min=ckpt["x_min"],
+            x_max=ckpt["x_max"],
+            X_max=ckpt["X_max"],
+            T=ckpt["T"],
+            r_max=ckpt["r_max"],
+            xi0_max=ckpt["xi0_max"],
+            omega_max=ckpt["omega_max"],
+            kappa_max=ckpt["kappa_max"],
             call_put=call_put,
             hidden=hidden,
             depth=depth,
@@ -204,6 +228,7 @@ def get_model_label(pinn: nn.Module) -> str:
         ModelType.TWO_D: "Black–Scholes (2D)",
         ModelType.HD: "Black–Scholes (HD)",
         ModelType.HESTON: "Heston",
+        ModelType.BERGOMI: "Bergomi (1-factor)",
     }
     return labels[model_type]
 
@@ -213,9 +238,10 @@ def predict_price(pinn: nn.Module, S, K, tau, **kwargs) -> torch.Tensor:
     Unified price prediction for any supported PINN.
 
     Extra keyword arguments depend on model type:
-      - two_d  : (none; r and sigma are fixed on the model)
-      - hd     : r, sigma
-      - heston : v, r, kappa, theta, sigma, rho, sigma_mode (optional)
+      - two_d   : (none; r and sigma are fixed on the model)
+      - hd      : r, sigma
+      - heston  : v, r, kappa, theta, sigma, rho, sigma_mode (optional)
+      - bergomi : X, r, xi0, omega, kappa, rho, sigma_mode, stationary (optional)
     """
     model_type = detect_model_type(pinn)
 
@@ -226,6 +252,21 @@ def predict_price(pinn: nn.Module, S, K, tau, **kwargs) -> torch.Tensor:
         r = kwargs.get("r", 0.05)
         sigma = kwargs.get("sigma", 0.2)
         return pinn.predict_price(S=S, K=K, tau=tau, r=r, sigma=sigma)
+
+    if model_type == ModelType.BERGOMI:
+        return pinn.predict_price(
+            S=S,
+            K=K,
+            X=kwargs["X"],
+            tau=tau,
+            r=kwargs["r"],
+            xi0=kwargs["xi0"],
+            omega=kwargs["omega"],
+            kappa=kwargs["kappa"],
+            rho=kwargs["rho"],
+            sigma_mode=kwargs.get("sigma_mode", "flat_fwd"),
+            stationary=kwargs.get("stationary", True),
+        )
 
     sigma_mode = kwargs.get("sigma_mode", "hybrid")
     return pinn.predict_price(
@@ -254,6 +295,12 @@ def _analytical_price(
     """Ground-truth price for the given model type."""
     model_type = detect_model_type(pinn)
     call_put = getattr(pinn, "call_put", "Call")
+
+    if model_type == ModelType.BERGOMI:
+        raise NotImplementedError(
+            "Analytical Bergomi pricing is not available. "
+            "Benchmark against Monte Carlo instead of run_slice_test."
+        )
 
     if model_type == ModelType.HESTON:
         if call_put.lower() == "call":
@@ -329,6 +376,25 @@ def get_default_test_params(pinn: nn.Module, metadata: Optional[dict] = None) ->
             "s_step": 2.0,
         }
 
+    if model_type == ModelType.BERGOMI:
+        return {
+            "X": 0.0,
+            "r": 0.05,
+            "xi0": 0.04,
+            "omega": 1.0,
+            "kappa": 2.0,
+            "rho": -0.5,
+            "sigma_mode": metadata.get("sigma_mode", "flat_fwd"),
+            "stationary": metadata.get("stationary", True),
+            "K": 100.0,
+            "tau_min": 0.1,
+            "tau_max": min(pinn.T, 2.0),
+            "n_tau": 30,
+            "s_min": 50.0,
+            "s_max": 200.0,
+            "s_step": 5.0,
+        }
+
     sigma_mode = metadata.get("sigma_mode", "mean_reverting")
     return {
         "v": 0.3,
@@ -366,6 +432,12 @@ def run_slice_test(
     (spot_grid, tau_grid, mse_grid, pinn_prices, anal_prices) when
     return_values=True, else None.
     """
+    if detect_model_type(pinn) == ModelType.BERGOMI:
+        raise NotImplementedError(
+            "run_slice_test requires an analytical benchmark. "
+            "For Bergomi, compare predict_price against Monte Carlo."
+        )
+
     defaults = get_default_test_params(pinn)
     params = {**defaults, **kwargs}
 

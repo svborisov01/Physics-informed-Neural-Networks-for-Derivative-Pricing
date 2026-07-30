@@ -11,6 +11,7 @@ The network learns normalized option prices \(u = V/K\) in log-moneyness space \
 | `pricing/two_d_option_pricing.py` | 2D Black–Scholes | \((x, \tau)\) | Fixed interest rate \(r\) and volatility \(\sigma\) |
 | `pricing/hd_option_pricing.py` | HD Black–Scholes | \((x, \tau, r, \sigma)\) | Variable \(r\) and \(\sigma\) sampled during training |
 | `pricing/heston_option_pricing.py` | Heston correction | 22 features | Learns correction \(U\); total price \(u = u_{BS} + U\) |
+| `pricing/bergomi_option_pricing.py` | 1-factor Bergomi | 22 features | BS correction with OU factor \(X\); stationary variance by default |
 
 ## Installation
 
@@ -125,7 +126,8 @@ Legacy checkpoints cannot be loaded with the current code. `load_model` raises a
 ├── pricing/                    # PINN models and training loops
 │   ├── two_d_option_pricing.py
 │   ├── hd_option_pricing.py
-│   └── heston_option_pricing.py
+│   ├── heston_option_pricing.py
+│   └── bergomi_option_pricing.py
 ├── support_tools/
 │   ├── model_wrapper.py        # Universal load / test / visualize API
 │   ├── testing_tools.py        # Legacy test wrappers
@@ -150,6 +152,20 @@ Legacy checkpoints cannot be loaded with the current code. `load_model` raises a
 Heston models use a Black–Scholes baseline with effective volatility (`sigma_bs_effective`) and learn only the correction term \(U\).
 
 Ground-truth Heston prices for testing use the **Fang–Oosterlee COS method** (`heston_price` in `analytical_pricing_tools.py`), not Gil-Pelaez quadrature.
+
+1-factor Bergomi uses the same BS-correction pattern with OU factor \(X\)
+(`sigma_bs_bergomi`, default `flat_fwd`). Benchmark with Monte Carlo (no closed form yet).
+
+```python
+from pricing.bergomi_option_pricing import PINN, train_network
+
+pinn = PINN(
+    x_min=-3, x_max=3, X_max=3, T=2.0,
+    r_max=0.2, xi0_max=0.1, omega_max=2.0, kappa_max=5.0,
+    hidden=128, depth=4,
+).to(device)
+history = train_network(pinn, epochs=5000, sigma_mode="flat_fwd", stationary=True)
+```
 
 ## Known Limitations
 

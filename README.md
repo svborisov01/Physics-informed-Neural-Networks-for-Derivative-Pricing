@@ -185,6 +185,7 @@ history = train_network(pinn, epochs=5000, sigma_mode="flat_fwd", stationary=Tru
 - Greek comparison (`compare_greeks`) is defined for Black–Scholes models only
 - Three legacy checkpoints use outdated input feature sets and cannot be loaded
 - Runs assume execution from the repository root (no pip-installable package yet)
+- 1-factor Bergomi PINN is designed but not yet implemented — see [`docs/bergomi_1factor_pde.md`](docs/bergomi_1factor_pde.md)
 
 ## License
 

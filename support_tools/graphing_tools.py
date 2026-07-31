@@ -67,8 +67,13 @@ def plot_3d_result(
     """
     X, Y = np.meshgrid(inputs[0], inputs[1])
     if values == "diff":
-        Z = inputs[2]
-        z_title = "Difference between analytical and PINN solutions"
+        # Prefer absolute price error for visualization. inputs[2] is an MSE grid
+        # (squared residuals) used for metrics; plotting it exaggerates ATM ridges.
+        if len(inputs) >= 5:
+            Z = np.abs(np.asarray(inputs[3]) - np.asarray(inputs[4]))
+        else:
+            Z = np.sqrt(np.maximum(np.asarray(inputs[2]), 0.0))
+        z_title = "Absolute difference between analytical and PINN solutions"
     elif values == "pinn":
         Z = inputs[3]
         z_title = "PINN-based solution"

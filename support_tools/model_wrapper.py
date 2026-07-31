@@ -143,6 +143,8 @@ def _build_pinn(model_type: ModelType, ckpt: dict, hidden: int, depth: int) -> n
             call_put=call_put,
             hidden=hidden,
             depth=depth,
+            v_max=ckpt.get("v_max", 1.0),
+            kappa_floor=ckpt.get("kappa_floor", 0.25),
         )
 
     from pricing.heston_option_pricing import PINN
@@ -264,7 +266,7 @@ def predict_price(pinn: nn.Module, S, K, tau, **kwargs) -> torch.Tensor:
             omega=kwargs["omega"],
             kappa=kwargs["kappa"],
             rho=kwargs["rho"],
-            sigma_mode=kwargs.get("sigma_mode", "flat_fwd"),
+            sigma_mode=kwargs.get("sigma_mode", "spot_var"),
             stationary=kwargs.get("stationary", True),
         )
 
@@ -400,7 +402,7 @@ def get_default_test_params(pinn: nn.Module, metadata: Optional[dict] = None) ->
             "omega": 1.0,
             "kappa": 2.0,
             "rho": -0.5,
-            "sigma_mode": metadata.get("sigma_mode", "flat_fwd"),
+            "sigma_mode": metadata.get("sigma_mode", "spot_var"),
             "stationary": metadata.get("stationary", True),
             "K": 100.0,
             "tau_min": 0.1,
@@ -618,7 +620,7 @@ def compute_greeks(
         omega = kwargs["omega"]
         kappa = kwargs["kappa"]
         rho = kwargs["rho"]
-        sigma_mode = kwargs.get("sigma_mode", "flat_fwd")
+        sigma_mode = kwargs.get("sigma_mode", "spot_var")
         stationary = kwargs.get("stationary", True)
 
         X_t = torch.full_like(S_t, X)
@@ -636,7 +638,13 @@ def compute_greeks(
 
         t = None if stationary else (pinn.T - tau_t).clamp_min(0.0)
         v = v_bergomi(
-            X_t, xi0_t, omega_t, kappa_t, t=t, stationary=stationary
+            X_t,
+            xi0_t,
+            omega_t,
+            kappa_t,
+            t=t,
+            stationary=stationary,
+            v_max=getattr(pinn, "v_max", None),
         )
         sigma_bs = sigma_bs_bergomi(
             xi0=xi0_t, v=v, tau=tau_t, mode=sigma_mode

@@ -120,6 +120,7 @@ Uses scrambled Sobol QMC with antithetic differencing (ADD) for fine-grid price 
 
 | File | Type | Architecture | Compatible |
 |------|------|--------------|------------|
+| `bergomi.pt` | Bergomi 1F | hidden=128, depth=4, softplus β=400 | Yes |
 | `two_d.pt` | 2D BS | hidden=50, depth=5 | Yes |
 | `hd_minimal.pt` | HD BS | hidden=100, depth=3 | Yes |
 | `hd_warm_restarts.pt` | HD BS | hidden=40, depth=3 | Yes |

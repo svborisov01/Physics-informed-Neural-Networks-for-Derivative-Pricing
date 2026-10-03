@@ -1,0 +1,100 @@
+Loaded trained_models/bergomi.pt | sigma_mode=spot_var | softplus_β=400 | positivity=softplus
+
+=== 1) Fine-grid price norms (baseline smile) ===
+Fine grid abs norms: L1=0.1102, L2=0.1373, Linf=0.3207, neg=0/1479, minV=0.0961
+
+=== 2) Smile-structure heatmaps ===
+[smile 1/6] baseline: ξ₀=0.04, ω=1, κ=2, ρ=-0.5, X=0
+  abs L1=0.1266  L2=0.1515  Linf=0.2966  neg=0/609  minV=0.1382
+[smile 2/6] strong_vovol: ξ₀=0.04, ω=1.8, κ=2, ρ=-0.5, X=0
+  abs L1=0.1950  L2=0.2281  Linf=0.5073  neg=0/609  minV=0.0865
+[smile 3/6] strong_neg_skew: ξ₀=0.04, ω=1, κ=2, ρ=-0.85, X=0
+  abs L1=0.2369  L2=0.2840  Linf=0.5866  neg=0/609  minV=0.1548
+[smile 4/6] mild_fast_mr: ξ₀=0.04, ω=0.5, κ=4, ρ=-0.3, X=0
+  abs L1=0.0611  L2=0.0762  Linf=0.2053  neg=0/609  minV=0.1855
+[smile 5/6] slow_mr: ξ₀=0.04, ω=1.2, κ=0.6, ρ=-0.6, X=0
+  abs L1=0.2859  L2=0.3604  Linf=0.9193  neg=0/609  minV=0.0856
+[smile 6/6] near_bs: ξ₀=0.04, ω=0.05, κ=2, ρ=0, X=0
+  abs L1=0.0141  L2=0.0335  Linf=0.1716  neg=0/609  minV=0.1722
+
+=== 3) Greeks PINN vs QMC+ADD ===
+[greeks] baseline: ξ₀=0.04, ω=1, κ=2, ρ=-0.5, X=0
+  Greeks S=  70.0 τ=0.40 | ΔPINN=+0.0067 ΔMC=+0.0013 ΘPINN=-0.0998 ΘMC=-0.0456
+  Greeks S=  70.0 τ=0.80 | ΔPINN=+0.0328 ΔMC=+0.0267 ΘPINN=-0.4735 ΘMC=-0.5132
+  Greeks S=  70.0 τ=1.20 | ΔPINN=+0.0964 ΔMC=+0.0821 ΘPINN=-0.9362 ΘMC=-1.1425
+  Greeks S=  70.0 τ=1.50 | ΔPINN=+0.1486 ΔMC=+0.1307 ΘPINN=-1.1684 ΘMC=-1.5455
+  Greeks S=  85.0 τ=0.40 | ΔPINN=+0.1303 ΔMC=+0.1238 ΘPINN=-3.1709 ΘMC=-2.9468
+  Greeks S=  85.0 τ=0.80 | ΔPINN=+0.2714 ΔMC=+0.2715 ΘPINN=-4.0370 ΘMC=-3.9961
+  Greeks S=  85.0 τ=1.20 | ΔPINN=+0.3603 ΔMC=+0.3676 ΘPINN=-3.8507 ΘMC=-4.1979
+  Greeks S=  85.0 τ=1.50 | ΔPINN=+0.4107 ΔMC=+0.4212 ΘPINN=-3.6404 ΘMC=-4.1940
+  Greeks S= 100.0 τ=0.40 | ΔPINN=+0.5918 ΔMC=+0.6140 ΘPINN=-8.6690 ΘMC=-8.7872
+  Greeks S= 100.0 τ=0.80 | ΔPINN=+0.6306 ΔMC=+0.6513 ΘPINN=-6.8676 ΘMC=-6.9867
+  Greeks S= 100.0 τ=1.20 | ΔPINN=+0.6601 ΔMC=+0.6760 ΘPINN=-5.8074 ΘMC=-6.1317
+  Greeks S= 100.0 τ=1.50 | ΔPINN=+0.6786 ΔMC=+0.6924 ΘPINN=-5.2463 ΘMC=-5.7110
+  Greeks S= 115.0 τ=0.40 | ΔPINN=+0.9143 ΔMC=+0.9132 ΘPINN=-7.3200 ΘMC=-7.5767
+  Greeks S= 115.0 τ=0.80 | ΔPINN=+0.8727 ΔMC=+0.8734 ΘPINN=-6.8201 ΘMC=-6.8816
+  Greeks S= 115.0 τ=1.20 | ΔPINN=+0.8571 ΔMC=+0.8584 ΘPINN=-6.0131 ΘMC=-6.2734
+  Greeks S= 115.0 τ=1.50 | ΔPINN=+0.8520 ΔMC=+0.8552 ΘPINN=-5.5255 ΘMC=-5.9139
+  Greeks S= 140.0 τ=0.40 | ΔPINN=+0.9936 ΔMC=+0.9954 ΘPINN=-5.4062 ΘMC=-5.2616
+  Greeks S= 140.0 τ=0.80 | ΔPINN=+0.9848 ΔMC=+0.9802 ΘPINN=-5.5029 ΘMC=-5.5464
+  Greeks S= 140.0 τ=1.20 | ΔPINN=+0.9733 ΔMC=+0.9671 ΘPINN=-5.1673 ΘMC=-5.5093
+  Greeks S= 140.0 τ=1.50 | ΔPINN=+0.9656 ΔMC=+0.9607 ΘPINN=-4.9408 ΘMC=-5.3909
+[greeks] strong_vovol: ξ₀=0.04, ω=1.8, κ=2, ρ=-0.5, X=0
+  Greeks S=  70.0 τ=0.40 | ΔPINN=+0.0085 ΔMC=+0.0005 ΘPINN=-0.0743 ΘMC=-0.0220
+  Greeks S=  70.0 τ=0.80 | ΔPINN=+0.0242 ΔMC=+0.0150 ΘPINN=-0.1758 ΘMC=-0.3037
+  Greeks S=  70.0 τ=1.20 | ΔPINN=+0.0652 ΔMC=+0.0557 ΘPINN=-0.2942 ΘMC=-0.7899
+  Greeks S=  70.0 τ=1.50 | ΔPINN=+0.1103 ΔMC=+0.0995 ΘPINN=-0.3935 ΘMC=-1.1928
+  Greeks S=  85.0 τ=0.40 | ΔPINN=+0.1056 ΔMC=+0.0872 ΘPINN=-2.4772 ΘMC=-2.1128
+  Greeks S=  85.0 τ=0.80 | ΔPINN=+0.2556 ΔMC=+0.2441 ΘPINN=-3.6289 ΘMC=-3.5767
+  Greeks S=  85.0 τ=1.20 | ΔPINN=+0.3571 ΔMC=+0.3575 ΘPINN=-3.4434 ΘMC=-4.0544
+  Greeks S=  85.0 τ=1.50 | ΔPINN=+0.4161 ΔMC=+0.4191 ΘPINN=-3.1620 ΘMC=-4.1494
+  Greeks S= 100.0 τ=0.40 | ΔPINN=+0.5998 ΔMC=+0.6384 ΘPINN=-8.5435 ΘMC=-8.6590
+  Greeks S= 100.0 τ=0.80 | ΔPINN=+0.6430 ΔMC=+0.6780 ΘPINN=-6.9699 ΘMC=-7.0289
+  Greeks S= 100.0 τ=1.20 | ΔPINN=+0.6759 ΔMC=+0.7023 ΘPINN=-5.8184 ΘMC=-6.2067
+  Greeks S= 100.0 τ=1.50 | ΔPINN=+0.6965 ΔMC=+0.7183 ΘPINN=-5.1066 ΘMC=-5.8002
+  Greeks S= 115.0 τ=0.40 | ΔPINN=+0.9297 ΔMC=+0.9267 ΘPINN=-7.0686 ΘMC=-7.5478
+  Greeks S= 115.0 τ=0.80 | ΔPINN=+0.8883 ΔMC=+0.8909 ΘPINN=-6.7804 ΘMC=-6.8946
+  Greeks S= 115.0 τ=1.20 | ΔPINN=+0.8691 ΔMC=+0.8768 ΘPINN=-5.8872 ΘMC=-6.3003
+  Greeks S= 115.0 τ=1.50 | ΔPINN=+0.8613 ΔMC=+0.8723 ΘPINN=-5.2835 ΘMC=-5.9490
+  Greeks S= 140.0 τ=0.40 | ΔPINN=+0.9874 ΔMC=+0.9941 ΘPINN=-5.6609 ΘMC=-5.4711
+  Greeks S= 140.0 τ=0.80 | ΔPINN=+0.9810 ΔMC=+0.9796 ΘPINN=-5.5855 ΘMC=-5.7126
+  Greeks S= 140.0 τ=1.20 | ΔPINN=+0.9712 ΔMC=+0.9678 ΘPINN=-4.9843 ΘMC=-5.6157
+  Greeks S= 140.0 τ=1.50 | ΔPINN=+0.9639 ΔMC=+0.9623 ΘPINN=-4.6196 ΘMC=-5.4673
+[greeks] strong_neg_skew: ξ₀=0.04, ω=1, κ=2, ρ=-0.85, X=0
+  Greeks S=  70.0 τ=0.40 | ΔPINN=+0.0075 ΔMC=+0.0001 ΘPINN=-0.1099 ΘMC=-0.0019
+  Greeks S=  70.0 τ=0.80 | ΔPINN=+0.0351 ΔMC=+0.0133 ΘPINN=-0.5024 ΘMC=-0.2392
+  Greeks S=  70.0 τ=1.20 | ΔPINN=+0.0987 ΔMC=+0.0646 ΘPINN=-0.9431 ΘMC=-0.8764
+  Greeks S=  70.0 τ=1.50 | ΔPINN=+0.1502 ΔMC=+0.1167 ΘPINN=-1.1565 ΘMC=-1.3588
+  Greeks S=  85.0 τ=0.40 | ΔPINN=+0.1316 ΔMC=+0.1140 ΘPINN=-3.2043 ΘMC=-2.5210
+  Greeks S=  85.0 τ=0.80 | ΔPINN=+0.2718 ΔMC=+0.2756 ΘPINN=-4.0452 ΘMC=-3.8862
+  Greeks S=  85.0 τ=1.20 | ΔPINN=+0.3608 ΔMC=+0.3769 ΘPINN=-3.8462 ΘMC=-4.1800
+  Greeks S=  85.0 τ=1.50 | ΔPINN=+0.4113 ΔMC=+0.4348 ΘPINN=-3.6340 ΘMC=-4.2332
+  Greeks S= 100.0 τ=0.40 | ΔPINN=+0.5920 ΔMC=+0.6294 ΘPINN=-8.6780 ΘMC=-8.8104
+  Greeks S= 100.0 τ=0.80 | ΔPINN=+0.6309 ΔMC=+0.6679 ΘPINN=-6.8788 ΘMC=-7.0128
+  Greeks S= 100.0 τ=1.20 | ΔPINN=+0.6606 ΔMC=+0.6931 ΘPINN=-5.8059 ΘMC=-6.1648
+  Greeks S= 100.0 τ=1.50 | ΔPINN=+0.6795 ΔMC=+0.7088 ΘPINN=-5.2488 ΘMC=-5.7397
+  Greeks S= 115.0 τ=0.40 | ΔPINN=+0.9144 ΔMC=+0.9114 ΘPINN=-7.3315 ΘMC=-7.7941
+  Greeks S= 115.0 τ=0.80 | ΔPINN=+0.8729 ΔMC=+0.8759 ΘPINN=-6.8376 ΘMC=-6.9581
+  Greeks S= 115.0 τ=1.20 | ΔPINN=+0.8576 ΔMC=+0.8631 ΘPINN=-6.0337 ΘMC=-6.3080
+  Greeks S= 115.0 τ=1.50 | ΔPINN=+0.8530 ΔMC=+0.8594 ΘPINN=-5.5602 ΘMC=-5.9353
+  Greeks S= 140.0 τ=0.40 | ΔPINN=+0.9935 ΔMC=+0.9935 ΘPINN=-5.4191 ΘMC=-5.4323
+  Greeks S= 140.0 τ=0.80 | ΔPINN=+0.9847 ΔMC=+0.9771 ΘPINN=-5.5276 ΘMC=-5.7098
+  Greeks S= 140.0 τ=1.20 | ΔPINN=+0.9735 ΔMC=+0.9638 ΘPINN=-5.2157 ΘMC=-5.6250
+  Greeks S= 140.0 τ=1.50 | ΔPINN=+0.9661 ΔMC=+0.9578 ΘPINN=-5.0172 ΘMC=-5.4724
+
+=== 4) 3D surfaces: price + key Greeks + error ===
+[3d surfaces] baseline: ξ₀=0.04, ω=1, κ=2, ρ=-0.5, X=0
+[3d surfaces] strong_vovol: ξ₀=0.04, ω=1.8, κ=2, ρ=-0.5, X=0
+[3d surfaces] strong_neg_skew: ξ₀=0.04, ω=1, κ=2, ρ=-0.85, X=0
+[3d surfaces] mild_fast_mr: ξ₀=0.04, ω=0.5, κ=4, ρ=-0.3, X=0
+[3d surfaces] slow_mr: ξ₀=0.04, ω=1.2, κ=0.6, ρ=-0.6, X=0
+[3d surfaces] near_bs: ξ₀=0.04, ω=0.05, κ=2, ρ=0, X=0
+
+Wrote artifacts/bergomi_extensive_tests/report.json
+Wrote artifacts/bergomi_extensive_tests/SUMMARY.md
+Mirrored artifacts to /opt/cursor/artifacts/bergomi_extensive_tests
+
+Summary — fine-grid abs norms: L1=0.1102, L2=0.1373, Linf=0.3207 | softplus_β=400.0 | neg=0/1479 | minV=0.09611944109201431
+Greeks[baseline] Delta L1=0.0082 Theta L1=0.2408
+Greeks[strong_vovol] Delta L1=0.0115 Theta L1=0.4107
+Greeks[strong_neg_skew] Delta L1=0.0169 Theta L1=0.2912

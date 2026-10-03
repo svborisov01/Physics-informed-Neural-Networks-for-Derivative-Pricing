@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""CLI entry point for extensive Bergomi PINN vs QMC+ADD tests."""
+"""CLI entry point for extensive Bergomi PINN vs QMC+ADD tests.
+
+Default checkpoint is the softplus-β=400 base model
+(`trained_models/bergomi.pt`). Reports include absolute/relative norms,
+negativity counts, Greeks, and 3D surfaces.
+"""
 
 from __future__ import annotations
 
@@ -57,9 +62,13 @@ def main():
         print(f"Mirrored artifacts to {dest}")
 
     fine = report["fine_grid"]["abs_norms"]
+    pos = report["fine_grid"].get("positivity", {})
+    beta = report.get("meta", {}).get("runtime_softplus_beta")
     print(
         "\nSummary — fine-grid abs norms: "
-        f"L1={fine['L1']:.4f}, L2={fine['L2']:.4f}, Linf={fine['Linf']:.4f}"
+        f"L1={fine['L1']:.4f}, L2={fine['L2']:.4f}, Linf={fine['Linf']:.4f} | "
+        f"softplus_β={beta} | neg={pos.get('n_negative')}/{pos.get('n_total')} | "
+        f"minV={pos.get('min_price')}"
     )
     for g in report["greeks"]:
         name = g["smile"]["name"]

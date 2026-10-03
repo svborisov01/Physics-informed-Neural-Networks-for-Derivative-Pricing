@@ -165,6 +165,13 @@ def run_fine_grid_price_norms(
 
     abs_norms = error_norms(abs_err)
     rel_norms = error_norms(rel_err)
+    neg_mask = pinn_p < 0.0
+    positivity = {
+        "n_negative": int(neg_mask.sum()),
+        "n_total": int(pinn_p.size),
+        "min_price": float(np.min(pinn_p)),
+        "frac_negative": float(neg_mask.mean()),
+    }
 
     stem = f"fine_grid_{smile.name}"
     save_heatmap(
@@ -206,6 +213,7 @@ def run_fine_grid_price_norms(
         },
         "abs_norms": abs_norms,
         "rel_norms": rel_norms,
+        "positivity": positivity,
         "mean_mc_stderr": float(np.mean(se)),
         "max_mc_stderr": float(np.max(se)),
         "artifacts": {
@@ -266,10 +274,13 @@ def run_smile_heatmaps(
             out_dir / "smile_heatmaps" / f"heatmap_{smile.name}.png"
         )
         results.append(res)
+        pos = res["positivity"]
         print(
             f"  abs L1={res['abs_norms']['L1']:.4f}  "
             f"L2={res['abs_norms']['L2']:.4f}  "
-            f"Linf={res['abs_norms']['Linf']:.4f}"
+            f"Linf={res['abs_norms']['Linf']:.4f}  "
+            f"neg={pos['n_negative']}/{pos['n_total']}  "
+            f"minV={pos['min_price']:.4f}"
         )
     return results
 
@@ -633,7 +644,17 @@ def run_extensive_bergomi_tests(
 
     pinn, meta = load_model(checkpoint, device=device)
     pinn.eval()
-    print(f"Loaded {checkpoint} | meta sigma_mode={meta.get('sigma_mode')}")
+    softplus_beta = float(
+        getattr(
+            pinn,
+            "price_softplus_beta",
+            meta.get("price_softplus_beta", 0.0) or 0.0,
+        )
+    )
+    print(
+        f"Loaded {checkpoint} | sigma_mode={meta.get('sigma_mode')} | "
+        f"softplus_β={softplus_beta:g} | positivity={meta.get('positivity')}"
+    )
 
     baseline = smiles[0]
     print("\n=== 1) Fine-grid price norms (baseline smile) ===")
@@ -649,7 +670,9 @@ def run_extensive_bergomi_tests(
     )
     print(
         f"Fine grid abs norms: L1={fine['abs_norms']['L1']:.4f}, "
-        f"L2={fine['abs_norms']['L2']:.4f}, Linf={fine['abs_norms']['Linf']:.4f}"
+        f"L2={fine['abs_norms']['L2']:.4f}, Linf={fine['abs_norms']['Linf']:.4f}, "
+        f"neg={fine['positivity']['n_negative']}/{fine['positivity']['n_total']}, "
+        f"minV={fine['positivity']['min_price']:.4f}"
     )
 
     print("\n=== 2) Smile-structure heatmaps ===")
@@ -697,22 +720,28 @@ def run_extensive_bergomi_tests(
             )
         surface_results.append(surf)
 
+    report_meta = {
+        k: meta[k]
+        for k in (
+            "model_type",
+            "sigma_mode",
+            "stationary",
+            "call_put",
+            "hidden",
+            "depth",
+            "epoch",
+            "loss",
+            "price_softplus_beta",
+            "positivity",
+            "softplus_mode",
+        )
+        if k in meta
+    }
+    report_meta["runtime_softplus_beta"] = softplus_beta
+
     report = {
         "checkpoint": checkpoint,
-        "meta": {
-            k: meta[k]
-            for k in (
-                "model_type",
-                "sigma_mode",
-                "stationary",
-                "call_put",
-                "hidden",
-                "depth",
-                "epoch",
-                "loss",
-            )
-            if k in meta
-        },
+        "meta": report_meta,
         "method": "scrambled Sobol QMC + antithetic differencing (ADD)",
         "fine_grid": fine,
         "smile_heatmaps": smile_results,
@@ -724,4 +753,89 @@ def run_extensive_bergomi_tests(
     with open(report_path, "w", encoding="utf-8") as f:
         json.dump(report, f, indent=2)
     print(f"\nWrote {report_path}")
+
+    summary_path = out_dir / "SUMMARY.md"
+    write_extensive_tests_summary(report, summary_path)
+    print(f"Wrote {summary_path}")
     return report
+
+
+def write_extensive_tests_summary(report: dict, path: Path) -> None:
+    """Write a human-readable SUMMARY.md from an extensive-test report."""
+    path = Path(path)
+    fine = report["fine_grid"]
+    meta = report.get("meta", {})
+    beta = meta.get("runtime_softplus_beta", meta.get("price_softplus_beta", "n/a"))
+    pos = fine.get("positivity", {})
+    lines = [
+        "# Bergomi PINN extensive tests (QMC + ADD)",
+        "",
+        "Benchmark: scrambled Sobol **QMC** with **antithetic differencing (ADD)**.",
+        f"Checkpoint: `{report.get('checkpoint', 'trained_models/bergomi.pt')}`.",
+        f"Positivity: softplus β={beta} "
+        f"(negatives on fine grid: {pos.get('n_negative', '?')}/"
+        f"{pos.get('n_total', '?')}, min V={pos.get('min_price', float('nan')):.4g}).",
+        "",
+        "## Where to find plots",
+        "",
+        "### Error heatmaps (τ, S)",
+        "`smile_heatmaps/heatmap_*.png` — one per smile set; title states "
+        r"\((ξ₀,ω,κ,ρ,X)\).",
+        "",
+        "### 3D surfaces (price + key Greeks)",
+        "`surfaces_3d/<smile>/3d_*.png` (interactive HTML alongside):",
+        "",
+        "| File | Quantity |",
+        "|------|----------|",
+        "| `3d_price_*.png` | PINN price $V$ |",
+        "| `3d_delta_*.png` | Delta $\\partial V/\\partial S$ |",
+        "| `3d_gamma_*.png` | Gamma $\\partial^2 V/\\partial S^2$ |",
+        "| `3d_theta_*.png` | Theta $\\partial V/\\partial t$ |",
+        "| `3d_vega_*.png` | Vega $\\partial V/\\partial\\sigma$, "
+        "$\\sigma=\\sqrt{ξ₀}$ |",
+        "| `3d_dual_X_*.png` | Factor greek $\\partial V/\\partial X$ |",
+        "| `3d_abs_err_*.png` | 3D abs price error vs QMC+ADD |",
+        "| `3d_rel_err_*.png` | 3D relative price error |",
+        "",
+        "## Fine-grid abs norms (baseline)",
+        "",
+        "| L1 | L2 | L∞ | neg prices | min V |",
+        "|----|----|-----|------------|-------|",
+        (
+            f"| {fine['abs_norms']['L1']:.3f} "
+            f"| {fine['abs_norms']['L2']:.3f} "
+            f"| {fine['abs_norms']['Linf']:.3f} "
+            f"| {pos.get('n_negative', 0)} "
+            f"| {pos.get('min_price', float('nan')):.4g} |"
+        ),
+        "",
+        "## Smile heatmap abs norms",
+        "",
+        "| Smile | Abs L1 | Abs L∞ | neg | min V |",
+        "|-------|--------|--------|-----|-------|",
+    ]
+    for sm in report.get("smile_heatmaps", []):
+        name = sm["smile"]["name"]
+        a = sm["abs_norms"]
+        p = sm.get("positivity", {})
+        lines.append(
+            f"| {name} | {a['L1']:.3f} | {a['Linf']:.3f} | "
+            f"{p.get('n_negative', 0)} | {p.get('min_price', float('nan')):.4g} |"
+        )
+
+    lines += [
+        "",
+        "## Reproduce plots only (fast)",
+        "",
+        "```bash",
+        "python scripts/plot_bergomi_surfaces.py --checkpoint trained_models/bergomi.pt",
+        "```",
+        "",
+        "Full QMC+ADD suite:",
+        "",
+        "```bash",
+        "python scripts/run_bergomi_extensive_tests.py --checkpoint trained_models/bergomi.pt",
+        "```",
+        "",
+    ]
+    path.write_text("\n".join(lines), encoding="utf-8")

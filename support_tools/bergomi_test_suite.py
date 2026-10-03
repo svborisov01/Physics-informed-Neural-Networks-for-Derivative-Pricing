@@ -434,7 +434,12 @@ def bergomi_price_greeks_grids(
       vega = ∂V/∂σ with σ = sqrt(ξ₀)
       dual_X = ∂V/∂X  (forward-variance factor sensitivity)
     """
-    from pricing.bergomi_option_pricing import sigma_bs_bergomi, v_bergomi
+    from pricing.bergomi_option_pricing import (
+        DEFAULT_PRICE_SOFTPLUS_BETA,
+        _soft_positive_price,
+        sigma_bs_bergomi,
+        v_bergomi,
+    )
     from support_tools.analytical_pricing_tools import bs_option_normalized_from_x
 
     device = next(pinn.parameters()).device
@@ -472,7 +477,11 @@ def bergomi_price_greeks_grids(
     u_bs = bs_option_normalized_from_x(
         x=x_t, tau=tau_t, r=r_t, sigma_bs=sigma_bs, call_put=pinn.call_put
     )
-    V = (u_bs + U) * K_t
+    beta = float(
+        getattr(pinn, "price_softplus_beta", DEFAULT_PRICE_SOFTPLUS_BETA)
+    )
+    # Match inference / compute_greeks: V = K * softplus_β(u_BS + U)
+    V = _soft_positive_price(u_bs + U, beta=beta) * K_t
 
     ones = torch.ones_like(V)
     dV_dS = torch.autograd.grad(

@@ -21,6 +21,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
+from support_tools.graphing_tools import save_surface_3d, save_surface_3d_html
 from support_tools.model_wrapper import compute_greeks, load_model, predict_price
 from support_tools.monte_carlo_pricing_tools import (
     Bergomi_QMC_ADD_Greeks,
@@ -402,6 +403,220 @@ def run_greeks_tests(
     return summary
 
 
+def bergomi_price_greeks_grids(
+    pinn,
+    smile: SmileParams,
+    K: float = 100.0,
+    s_min: float = 70.0,
+    s_max: float = 140.0,
+    n_s: int = 41,
+    tau_min: float = 0.25,
+    tau_max: float = 1.5,
+    n_tau: int = 31,
+) -> dict:
+    """
+    Evaluate PINN price and key Greeks on an (S, tau) grid via autograd.
+
+    Returns dict of arrays shaped (n_s, n_tau):
+      price, delta, gamma, theta, vega, dual_X
+    where
+      vega = ∂V/∂σ with σ = sqrt(ξ₀)
+      dual_X = ∂V/∂X  (forward-variance factor sensitivity)
+    """
+    from pricing.bergomi_option_pricing import sigma_bs_bergomi, v_bergomi
+    from support_tools.analytical_pricing_tools import bs_option_normalized_from_x
+
+    device = next(pinn.parameters()).device
+    S_grid = np.linspace(s_min, s_max, n_s, dtype=np.float64)
+    tau_grid = np.linspace(tau_min, tau_max, n_tau, dtype=np.float64)
+    SS, TT = np.meshgrid(S_grid, tau_grid, indexing="ij")
+
+    S_t = torch.as_tensor(SS.ravel(), dtype=torch.float32, device=device).reshape(-1, 1)
+    tau_t = torch.as_tensor(TT.ravel(), dtype=torch.float32, device=device).reshape(-1, 1)
+    K_t = torch.full_like(S_t, float(K))
+    r_t = torch.full_like(S_t, float(smile.r))
+    omega_t = torch.full_like(S_t, float(smile.omega))
+    kappa_t = torch.full_like(S_t, float(smile.kappa))
+    rho_t = torch.full_like(S_t, float(smile.rho))
+
+    S_t = S_t.detach().requires_grad_(True)
+    tau_t = tau_t.detach().requires_grad_(True)
+    xi0_t = torch.full_like(S_t, float(smile.xi0)).requires_grad_(True)
+    X_t = torch.full_like(S_t, float(smile.X)).requires_grad_(True)
+
+    eps = 1e-8
+    x_t = torch.log(torch.clamp(S_t, min=eps) / torch.clamp(K_t, min=eps))
+    U = pinn.forward_x(x_t, X_t, tau_t, r_t, xi0_t, omega_t, kappa_t, rho_t)
+    t = None if smile.stationary else (pinn.T - tau_t).clamp_min(0.0)
+    v = v_bergomi(
+        X_t,
+        xi0_t,
+        omega_t,
+        kappa_t,
+        t=t,
+        stationary=smile.stationary,
+        v_max=getattr(pinn, "v_max", None),
+    )
+    sigma_bs = sigma_bs_bergomi(xi0=xi0_t, v=v, tau=tau_t, mode=smile.sigma_mode)
+    u_bs = bs_option_normalized_from_x(
+        x=x_t, tau=tau_t, r=r_t, sigma_bs=sigma_bs, call_put=pinn.call_put
+    )
+    V = (u_bs + U) * K_t
+
+    ones = torch.ones_like(V)
+    dV_dS = torch.autograd.grad(
+        V, S_t, grad_outputs=ones, create_graph=True, retain_graph=True
+    )[0]
+    dV_dtau = torch.autograd.grad(
+        V, tau_t, grad_outputs=ones, create_graph=False, retain_graph=True
+    )[0]
+    dV_dxi0 = torch.autograd.grad(
+        V, xi0_t, grad_outputs=ones, create_graph=False, retain_graph=True
+    )[0]
+    dV_dX = torch.autograd.grad(
+        V, X_t, grad_outputs=ones, create_graph=False, retain_graph=True
+    )[0]
+    d2V_dS2 = torch.autograd.grad(
+        dV_dS, S_t, grad_outputs=ones, create_graph=False, retain_graph=False
+    )[0]
+
+    sigma0 = max(float(np.sqrt(smile.xi0)), 1e-8)
+    # vega := ∂V/∂σ, σ=√ξ₀  =>  ∂V/∂ξ₀ * ∂ξ₀/∂σ = ∂V/∂ξ₀ * 2σ
+    vega = dV_dxi0 * (2.0 * sigma0)
+
+    shape = SS.shape
+
+    def _np(t):
+        return t.detach().cpu().numpy().reshape(shape)
+
+    return {
+        "S_grid": S_grid,
+        "tau_grid": tau_grid,
+        "price": _np(V),
+        "delta": _np(dV_dS),
+        "gamma": _np(d2V_dS2),
+        "theta": _np(-dV_dtau),
+        "vega": _np(vega),
+        "dual_X": _np(dV_dX),
+        "smile": smile,
+    }
+
+
+def run_3d_surfaces(
+    pinn,
+    smile: SmileParams,
+    out_dir: Path,
+    K: float = 100.0,
+    write_html: bool = True,
+    **grid_kwargs,
+) -> dict:
+    """
+    Write 3D PNG (and optional HTML) surfaces for price and key Greeks.
+    """
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    grids = bergomi_price_greeks_grids(pinn, smile, K=K, **grid_kwargs)
+
+    S = grids["S_grid"]
+    tau = grids["tau_grid"]
+    title_base = smile.title_fragment()
+    surfaces = {
+        "price": ("PINN price V", "V", "viridis"),
+        "delta": ("PINN Delta ∂V/∂S", "Δ", "coolwarm"),
+        "gamma": ("PINN Gamma ∂²V/∂S²", "Γ", "magma"),
+        "theta": ("PINN Theta ∂V/∂t", "Θ", "cividis"),
+        "vega": ("PINN Vega ∂V/∂σ (σ=√ξ₀)", "Vega", "plasma"),
+        "dual_X": ("PINN dual-X ∂V/∂X", "∂V/∂X", "inferno"),
+    }
+
+    artifacts = {}
+    for key, (label, zlab, cmap) in surfaces.items():
+        Z = grids[key]
+        png = out_dir / f"3d_{key}_{smile.name}.png"
+        save_surface_3d(
+            S,
+            tau,
+            Z,
+            title=f"{label}\n{title_base}",
+            path=png,
+            z_label=zlab,
+            cmap=cmap,
+        )
+        artifacts[f"{key}_png"] = str(png)
+        if write_html:
+            html = out_dir / f"3d_{key}_{smile.name}.html"
+            save_surface_3d_html(
+                S,
+                tau,
+                Z,
+                title=f"{label} — {title_base}",
+                path=html,
+                z_label=zlab,
+            )
+            artifacts[f"{key}_html"] = str(html)
+
+    np.savez_compressed(
+        out_dir / f"surfaces_{smile.name}.npz",
+        S_grid=S,
+        tau_grid=tau,
+        price=grids["price"],
+        delta=grids["delta"],
+        gamma=grids["gamma"],
+        theta=grids["theta"],
+        vega=grids["vega"],
+        dual_X=grids["dual_X"],
+    )
+    artifacts["npz"] = str(out_dir / f"surfaces_{smile.name}.npz")
+    return {"smile": asdict(smile), "artifacts": artifacts}
+
+
+def run_3d_error_surfaces(
+    npz_path: Path,
+    smile: SmileParams,
+    out_dir: Path,
+    write_html: bool = True,
+) -> dict:
+    """3D surfaces of absolute / relative price error from a saved fine-grid npz."""
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    data = np.load(npz_path)
+    S = data["S_grid"]
+    tau = data["tau_grid"]
+    abs_err = data["abs_err"]
+    rel_err = data["rel_err"]
+    title = smile.title_fragment()
+
+    arts = {}
+    for key, Z, lab, cmap in (
+        ("abs_err", abs_err, "|PINN − QMC+ADD|", "magma"),
+        ("rel_err", rel_err, "rel. error", "viridis"),
+    ):
+        png = out_dir / f"3d_{key}_{smile.name}.png"
+        save_surface_3d(
+            S,
+            tau,
+            Z,
+            title=f"3D {lab}\n{title}",
+            path=png,
+            z_label=lab,
+            cmap=cmap,
+        )
+        arts[f"{key}_png"] = str(png)
+        if write_html:
+            html = out_dir / f"3d_{key}_{smile.name}.html"
+            save_surface_3d_html(
+                S,
+                tau,
+                Z,
+                title=f"3D {lab} — {title}",
+                path=html,
+                z_label=lab,
+                colorscale="Magma" if key == "abs_err" else "Viridis",
+            )
+            arts[f"{key}_html"] = str(html)
+    return arts
+
+
 def run_extensive_bergomi_tests(
     checkpoint: str = "trained_models/bergomi.pt",
     out_dir: str | Path = "artifacts/bergomi_extensive_tests",
@@ -462,6 +677,26 @@ def run_extensive_bergomi_tests(
             )
         )
 
+    print("\n=== 4) 3D surfaces: price + key Greeks + error ===")
+    surface_results = []
+    for smile in smiles:
+        print(f"[3d surfaces] {smile.title_fragment()}")
+        surf = run_3d_surfaces(
+            pinn,
+            smile,
+            out_dir=out_dir / "surfaces_3d" / smile.name,
+            write_html=True,
+        )
+        npz = out_dir / "smile_heatmaps" / f"fine_grid_{smile.name}.npz"
+        if npz.exists():
+            surf["error_3d"] = run_3d_error_surfaces(
+                npz,
+                smile,
+                out_dir=out_dir / "surfaces_3d" / smile.name,
+                write_html=True,
+            )
+        surface_results.append(surf)
+
     report = {
         "checkpoint": checkpoint,
         "meta": {
@@ -482,6 +717,7 @@ def run_extensive_bergomi_tests(
         "fine_grid": fine,
         "smile_heatmaps": smile_results,
         "greeks": greeks_results,
+        "surfaces_3d": surface_results,
     }
 
     report_path = out_dir / "report.json"

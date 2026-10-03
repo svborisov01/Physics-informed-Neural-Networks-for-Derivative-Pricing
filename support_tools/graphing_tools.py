@@ -1,6 +1,109 @@
+from pathlib import Path
+
 import matplotlib.pyplot as plt
-import plotly.graph_objects as go
+from mpl_toolkits.mplot3d import Axes3D  # noqa: F401  (registers 3D projection)
 import numpy as np
+
+try:
+    import plotly.graph_objects as go
+except ImportError:  # pragma: no cover
+    go = None
+
+
+def save_surface_3d(
+    S_grid,
+    tau_grid,
+    Z,
+    title: str,
+    path,
+    z_label: str = "value",
+    cmap: str = "viridis",
+    elev: float = 28.0,
+    azim: float = -55.0,
+):
+    """
+    Save a static matplotlib 3D surface with axes (S, tau, Z).
+
+    Parameters
+    ----------
+    S_grid, tau_grid : 1d arrays
+    Z : 2d array shaped (len(S_grid), len(tau_grid))
+    """
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    S_grid = np.asarray(S_grid, dtype=float)
+    tau_grid = np.asarray(tau_grid, dtype=float)
+    Z = np.asarray(Z, dtype=float)
+    Tau, SS = np.meshgrid(tau_grid, S_grid)
+
+    fig = plt.figure(figsize=(9.2, 6.8), dpi=160)
+    ax = fig.add_subplot(111, projection="3d")
+    surf = ax.plot_surface(
+        SS,
+        Tau,
+        Z,
+        cmap=cmap,
+        linewidth=0,
+        antialiased=True,
+        rstride=1,
+        cstride=1,
+        alpha=0.95,
+    )
+    ax.view_init(elev=elev, azim=azim)
+    ax.set_xlabel("Spot price S")
+    ax.set_ylabel("Time to maturity τ")
+    ax.set_zlabel(z_label)
+    ax.set_title(title, fontsize=11, pad=10)
+    fig.colorbar(surf, ax=ax, shrink=0.65, pad=0.08, label=z_label)
+    fig.tight_layout()
+    fig.savefig(path, bbox_inches="tight")
+    plt.close(fig)
+    return path
+
+
+def save_surface_3d_html(
+    S_grid,
+    tau_grid,
+    Z,
+    title: str,
+    path,
+    z_label: str = "value",
+    colorscale: str = "Viridis",
+):
+    """Save an interactive Plotly 3D surface (S, tau, Z) as HTML."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    S_grid = np.asarray(S_grid, dtype=float)
+    tau_grid = np.asarray(tau_grid, dtype=float)
+    Z = np.asarray(Z, dtype=float)
+    # Plotly Surface: x,y are 2d or 1d; z shape matches
+    X, Y = np.meshgrid(S_grid, tau_grid)  # rows=tau, cols=S
+    fig = go.Figure(
+        data=[
+            go.Surface(
+                x=X,
+                y=Y,
+                z=Z.T,
+                colorscale=colorscale,
+                colorbar=dict(title=z_label),
+            )
+        ]
+    )
+    fig.update_layout(
+        title=title,
+        scene=dict(
+            xaxis_title="Spot price S",
+            yaxis_title="Time to maturity τ",
+            zaxis_title=z_label,
+        ),
+        width=900,
+        height=700,
+        margin=dict(l=0, r=0, t=50, b=0),
+    )
+    fig.write_html(str(path), include_plotlyjs="cdn")
+    return path
 
 
 def plot_convergence(histories, x_axis: str = "epochs"):

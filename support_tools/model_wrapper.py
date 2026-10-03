@@ -660,7 +660,10 @@ def compute_greeks(
         u_bs = bs_option_normalized_from_x(
             x=x_t, tau=tau_t, r=r_t, sigma_bs=sigma_bs, call_put=pinn.call_put
         )
-        u = u_bs + U
+        from pricing.bergomi_option_pricing import _soft_positive_price
+
+        beta = float(getattr(pinn, "price_softplus_beta", 40.0))
+        u = _soft_positive_price(u_bs + U, beta=beta)
     else:
         raise ValueError(f"Unsupported model type: {model_type}")
 

@@ -299,9 +299,12 @@ def _analytical_price(
     call_put = getattr(pinn, "call_put", "Call")
 
     if model_type == ModelType.BERGOMI:
-        from support_tools.monte_carlo_pricing_tools import Bergomi_Monte_Carlo
+        from support_tools.monte_carlo_pricing_tools import (
+            Bergomi_Monte_Carlo,
+            Bergomi_QMC_ADD,
+        )
 
-        return Bergomi_Monte_Carlo(
+        mc_kwargs = dict(
             S0=spot,
             K=K,
             T=tau,
@@ -319,6 +322,10 @@ def _analytical_price(
             seed=params.get("mc_seed", None),
             return_stderr=False,
         )
+        method = str(params.get("mc_method", "qmc_add")).lower()
+        if method in {"qmc_add", "qmc", "add"}:
+            return Bergomi_QMC_ADD(**mc_kwargs)
+        return Bergomi_Monte_Carlo(**mc_kwargs)
 
     if model_type == ModelType.HESTON:
         if call_put.lower() == "call":
@@ -411,9 +418,10 @@ def get_default_test_params(pinn: nn.Module, metadata: Optional[dict] = None) ->
             "s_min": 50.0,
             "s_max": 200.0,
             "s_step": 5.0,
-            "n_mc_paths": 20_000,
-            "n_mc_steps": 100,
+            "n_mc_paths": 131_072,
+            "n_mc_steps": 128,
             "mc_seed": 42,
+            "mc_method": "qmc_add",
             "q": 0.0,
         }
 
@@ -467,7 +475,7 @@ def run_slice_test(
     s_step = params.pop("s_step")
 
     # MC-only kwargs must not be forwarded to predict_price
-    mc_keys = ("n_mc_paths", "n_mc_steps", "mc_seed", "q", "X0")
+    mc_keys = ("n_mc_paths", "n_mc_steps", "mc_seed", "mc_method", "q", "X0")
     predict_params = {k: v for k, v in params.items() if k not in mc_keys}
 
     model_type = detect_model_type(pinn)

@@ -1,5 +1,12 @@
 import numpy as np
 
+try:
+    from scipy.stats import norm as _scipy_norm
+    from scipy.stats import qmc as _scipy_qmc
+except ImportError:  # pragma: no cover
+    _scipy_norm = None
+    _scipy_qmc = None
+
 
 def Heston_Monte_Carlo(
     S0,
@@ -397,3 +404,351 @@ def bergomi_mc_grid(
             k += 1
 
     return prices, stderrs
+
+
+# ============================================================
+# Bergomi QMC + Antithetic Differencing (ADD)
+# ============================================================
+
+
+def _next_power_of_two(n: int) -> int:
+    n = max(int(n), 1)
+    return 1 << (n - 1).bit_length()
+
+
+def _sobol_standard_normals(n_paths: int, dim: int, seed: int | None = None):
+    """Scrambled Sobol' points mapped to N(0,1) via inverse CDF."""
+    if _scipy_qmc is None or _scipy_norm is None:
+        raise ImportError("scipy is required for Bergomi QMC+ADD pricing")
+
+    n_pow2 = _next_power_of_two(n_paths)
+    engine = _scipy_qmc.Sobol(d=int(dim), scramble=True, seed=seed)
+    # skip first point of Sobol' engines for better uniformity in low dims
+    try:
+        engine.fast_forward(1)
+    except Exception:
+        pass
+    u = engine.random(n_pow2)[:n_paths]
+    u = np.clip(u, 1e-12, 1.0 - 1e-12)
+    return _scipy_norm.ppf(u).astype(np.float64)
+
+
+def _bergomi_simulate_from_normals(
+    S0,
+    T,
+    r,
+    q,
+    xi0,
+    omega,
+    kappa,
+    rho,
+    z_X,
+    z_perp,
+    X0=0.0,
+    stationary=True,
+):
+    """
+    Simulate Bergomi paths given unit normals of shape (n_paths, n_steps).
+
+    Returns
+    -------
+    ST : ndarray (n_paths,)
+    XT : ndarray (n_paths,)
+    mult : ndarray (n_paths,)
+        Terminal multiplicative factor ST / S0 (independent of S0).
+    """
+    n_paths, n_steps = z_X.shape
+    dt = T / n_steps
+    sqrt_dt = np.sqrt(dt)
+    exp_kdt = np.exp(-kappa * dt)
+    if kappa > 1e-12:
+        ou_std = np.sqrt(max((1.0 - np.exp(-2.0 * kappa * dt)) / (2.0 * kappa), 0.0))
+    else:
+        ou_std = sqrt_dt
+    rho_perp = np.sqrt(max(1.0 - rho * rho, 0.0))
+
+    log_S = np.full(n_paths, np.log(S0), dtype=np.float64)
+    X = np.full(n_paths, float(X0), dtype=np.float64)
+    t = 0.0
+
+    for k in range(n_steps):
+        v = _v_bergomi_np(
+            X, xi0=xi0, omega=omega, kappa=kappa, t=t, stationary=stationary
+        )
+        sqrt_v = np.sqrt(v)
+        zS = rho * z_X[:, k] + rho_perp * z_perp[:, k]
+        X = exp_kdt * X + ou_std * z_X[:, k]
+        log_S = log_S + (r - q - 0.5 * v) * dt + sqrt_v * sqrt_dt * zS
+        t += dt
+
+    ST = np.exp(log_S)
+    mult = ST / float(S0)
+    return ST, X, mult
+
+
+def Bergomi_QMC_ADD(
+    S0,
+    K,
+    T,
+    r,
+    q,
+    xi0,
+    omega,
+    kappa,
+    rho,
+    X0=0.0,
+    call_put="Call",
+    n_paths=131_072,
+    n_steps=128,
+    stationary=True,
+    seed=42,
+    return_stderr=False,
+    return_paths=False,
+    return_mult=False,
+):
+    """
+    Bergomi European pricer using scrambled Sobol' QMC with antithetic
+    differencing (ADD): each low-discrepancy path is paired with its
+    sign-flipped antithetic counterpart, and the estimator averages the pair.
+
+    ``n_paths`` is the *total* number of simulated trajectories after ADD
+    (so ``n_paths // 2`` Sobol' base points). Prefer powers of two.
+    """
+    cp = call_put.lower()
+    if cp not in {"call", "put"}:
+        raise ValueError("call_put must be either 'Call' or 'Put'")
+    if not (-1.0 < rho < 1.0):
+        raise ValueError("rho must lie strictly inside (-1, 1)")
+
+    n_paths = int(n_paths)
+    if n_paths % 2 != 0:
+        n_paths += 1
+    n_base = n_paths // 2
+    n_steps = int(n_steps)
+
+    if T <= 0.0:
+        intrinsic = max(S0 - K, 0.0) if cp == "call" else max(K - S0, 0.0)
+        mult = np.ones(n_paths, dtype=np.float64)
+        ST = np.full(n_paths, S0, dtype=np.float64)
+        XT = np.full(n_paths, X0, dtype=np.float64)
+        out = [float(intrinsic)]
+        if return_stderr:
+            out.append(0.0)
+        if return_paths:
+            out.append((ST, XT))
+        if return_mult:
+            out.append(mult)
+        return out[0] if len(out) == 1 else tuple(out)
+
+    # Two independent Gaussians per time step
+    z = _sobol_standard_normals(n_base, dim=2 * n_steps, seed=seed)
+    z = z.reshape(n_base, n_steps, 2)
+    # Antithetic differencing (ADD): append -Z
+    z = np.concatenate([z, -z], axis=0)
+    z_X = z[:, :, 0]
+    z_perp = z[:, :, 1]
+
+    ST, XT, mult = _bergomi_simulate_from_normals(
+        S0=S0,
+        T=T,
+        r=r,
+        q=q,
+        xi0=xi0,
+        omega=omega,
+        kappa=kappa,
+        rho=rho,
+        z_X=z_X,
+        z_perp=z_perp,
+        X0=X0,
+        stationary=stationary,
+    )
+
+    if cp == "call":
+        payoff = np.maximum(ST - K, 0.0)
+    else:
+        payoff = np.maximum(K - ST, 0.0)
+
+    disc_payoff = np.exp(-r * T) * payoff
+    # ADD pair averages for a lower-variance unbiased estimator
+    pair_avg = 0.5 * (disc_payoff[:n_base] + disc_payoff[n_base:])
+    price = float(pair_avg.mean())
+
+    out = [price]
+    if return_stderr:
+        # RQMC stderr from independent antithetic-pair averages
+        stderr = float(pair_avg.std(ddof=1) / np.sqrt(n_base)) if n_base > 1 else 0.0
+        out.append(stderr)
+    if return_paths:
+        out.append((ST, XT))
+    if return_mult:
+        out.append(mult)
+    return out[0] if len(out) == 1 else tuple(out)
+
+
+def bergomi_qmc_add_grid(
+    S_grid,
+    tau_grid,
+    K,
+    r,
+    q,
+    xi0,
+    omega,
+    kappa,
+    rho,
+    X0=0.0,
+    call_put="Call",
+    n_paths=131_072,
+    n_steps=128,
+    stationary=True,
+    seed=42,
+):
+    """
+    Price on a (S, tau) grid with one QMC+ADD noise field per maturity.
+
+    Because the terminal multiplier ST/S0 is independent of S0 under the
+    log-Euler scheme, all spots share the same simulated paths for each tau.
+    """
+    S_grid = np.asarray(S_grid, dtype=np.float64)
+    tau_grid = np.asarray(tau_grid, dtype=np.float64)
+    prices = np.empty((S_grid.size, tau_grid.size), dtype=np.float64)
+    stderrs = np.empty_like(prices)
+
+    cp = call_put.lower()
+    ss = np.random.SeedSequence(seed)
+    child_seeds = ss.spawn(tau_grid.size)
+
+    for j, tau in enumerate(tau_grid):
+        steps = max(
+            int(round(n_steps * max(float(tau), 1e-6) / max(float(tau_grid.max()), 1e-6))),
+            16,
+        )
+        # Simulate with S0=1 to obtain multiplicative factors
+        _price0, se0, mult = Bergomi_QMC_ADD(
+            S0=1.0,
+            K=K,  # unused for mult; overwritten below
+            T=float(tau),
+            r=r,
+            q=q,
+            xi0=xi0,
+            omega=omega,
+            kappa=kappa,
+            rho=rho,
+            X0=X0,
+            call_put=call_put,
+            n_paths=n_paths,
+            n_steps=steps,
+            stationary=stationary,
+            seed=int(child_seeds[j].generate_state(1)[0]),
+            return_stderr=True,
+            return_mult=True,
+        )
+        n_base = mult.size // 2
+        disc = np.exp(-r * float(tau))
+        for i, S0 in enumerate(S_grid):
+            ST = float(S0) * mult
+            if cp == "call":
+                payoff = np.maximum(ST - K, 0.0)
+            else:
+                payoff = np.maximum(K - ST, 0.0)
+            disc_payoff = disc * payoff
+            pair_avg = 0.5 * (disc_payoff[:n_base] + disc_payoff[n_base:])
+            prices[i, j] = float(pair_avg.mean())
+            stderrs[i, j] = (
+                float(pair_avg.std(ddof=1) / np.sqrt(n_base)) if n_base > 1 else 0.0
+            )
+        # silence unused
+        _ = (_price0, se0)
+
+    return prices, stderrs
+
+
+def Bergomi_QMC_ADD_Greeks(
+    S0,
+    K,
+    T,
+    r,
+    q,
+    xi0,
+    omega,
+    kappa,
+    rho,
+    X0=0.0,
+    call_put="Call",
+    n_paths=131_072,
+    n_steps=128,
+    stationary=True,
+    seed=42,
+    bump_S=1e-4,
+    bump_T=1e-4,
+):
+    """
+    Bergomi price / Delta / Theta via QMC+ADD.
+
+    Delta uses the pathwise estimator (same QMC+ADD paths).
+    Theta uses central finite differences in T with common random numbers
+    (shared unit normals, maturity-dependent time step).
+    """
+    cp = call_put.lower()
+    n_paths = int(n_paths)
+    if n_paths % 2 != 0:
+        n_paths += 1
+    n_base = n_paths // 2
+    n_steps = int(n_steps)
+
+    if T <= bump_T:
+        # fall back: intrinsic delta, zero theta near expiry
+        if cp == "call":
+            price = max(S0 - K, 0.0)
+            delta = 1.0 if S0 > K else 0.0
+        else:
+            price = max(K - S0, 0.0)
+            delta = -1.0 if S0 < K else 0.0
+        return float(price), float(delta), 0.0
+
+    z = _sobol_standard_normals(n_base, dim=2 * n_steps, seed=seed)
+    z = z.reshape(n_base, n_steps, 2)
+    z = np.concatenate([z, -z], axis=0)
+    z_X = z[:, :, 0]
+    z_perp = z[:, :, 1]
+
+    def _price_delta_at(T_loc):
+        ST, _, mult = _bergomi_simulate_from_normals(
+            S0=S0,
+            T=T_loc,
+            r=r,
+            q=q,
+            xi0=xi0,
+            omega=omega,
+            kappa=kappa,
+            rho=rho,
+            z_X=z_X,
+            z_perp=z_perp,
+            X0=X0,
+            stationary=stationary,
+        )
+        disc = np.exp(-r * T_loc)
+        if cp == "call":
+            payoff = np.maximum(ST - K, 0.0)
+            # pathwise delta: disc * 1_{ST>K} * (ST/S0)
+            pw = disc * (ST > K) * mult
+        else:
+            payoff = np.maximum(K - ST, 0.0)
+            pw = -disc * (ST < K) * mult
+        disc_payoff = disc * payoff
+        pair_p = 0.5 * (disc_payoff[:n_base] + disc_payoff[n_base:])
+        pair_d = 0.5 * (pw[:n_base] + pw[n_base:])
+        return float(pair_p.mean()), float(pair_d.mean())
+
+    price, delta = _price_delta_at(T)
+
+    # Common-random-number central difference for calendar Theta = dV/dT
+    # (PINN reports ∂V/∂t = -∂V/∂tau; with fixed calendar issuance this
+    #  matches -dV/dT for European claims.)
+    p_up, _ = _price_delta_at(T + bump_T)
+    p_dn, _ = _price_delta_at(T - bump_T)
+    dV_dT = (p_up - p_dn) / (2.0 * bump_T)
+    theta = -dV_dT
+
+    # Optional bump check for delta stability at the money (not returned)
+    _ = bump_S
+    return price, delta, theta

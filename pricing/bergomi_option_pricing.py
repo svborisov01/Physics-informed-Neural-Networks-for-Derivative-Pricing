@@ -685,12 +685,17 @@ def supervised_price_loss(
     batch,
     sigma_mode="spot_var",
     stationary=True,
+    relative: bool = False,
 ):
     """
     Weighted MSE between PINN normalized price and QMC+ADD labels.
 
     ``batch`` must contain tensors: x, X, tau, r, xi0, omega, kappa, rho,
     u_target, and optional weight.
+
+    Default is absolute error in normalized price (ATM weights in the
+    dataset already temper ITM dominance). Set ``relative=True`` to divide
+    by ``1+|u_BS|`` (can starve ITM gradients).
     """
     x = batch["x"]
     X = batch["X"]
@@ -708,9 +713,9 @@ def supervised_price_loss(
     u_pred, u_bs, _ = _total_price(
         pinn, x, X, tau, r, xi0, omega, kappa, rho, sigma_mode, stationary
     )
-    # Relative to BS scale so deep ITM does not dominate the fit.
-    denom = 1.0 + torch.abs(u_bs.detach())
-    err = (u_pred - u_target) / denom
+    err = u_pred - u_target
+    if relative:
+        err = err / (1.0 + torch.abs(u_bs.detach()))
     return torch.mean(weight * err**2)
 
 
@@ -789,9 +794,26 @@ def train_network(
     best_loss = float("inf")
     best_epoch = None
     best_state_dict = None
+    best_data_loss = float("inf")
     start_time = time.time()
 
     torch.autograd.set_detect_anomaly(detect_anomaly)
+
+    def _full_data_loss():
+        """Evaluate supervised loss on the entire labeled set (no grad)."""
+        if not use_data:
+            return float("inf")
+        pinn.eval()
+        with torch.no_grad():
+            # _total_price uses autograd-free forward through the net.
+            loss_val = supervised_price_loss(
+                pinn,
+                supervised_data,
+                sigma_mode=sigma_mode,
+                stationary=stationary,
+            )
+        pinn.train()
+        return float(loss_val.item())
 
     for epoch in range(1, epochs + 1):
         pinn.train()
@@ -885,42 +907,65 @@ def train_network(
         history["data"].append(data_val)
         history["lr"].append(current_lr)
 
-        if current_loss < best_loss:
+        # Prefer full-set data fit when hybrid labels are present; otherwise
+        # fall back to total training loss (PDE-only regime).
+        improved = False
+        if use_data and (epoch == 1 or epoch % print_every == 0 or epoch == epochs):
+            full_data = _full_data_loss()
+            history.setdefault("data_full", []).append(
+                {"epoch": epoch, "data_full": full_data}
+            )
+            if full_data < best_data_loss:
+                best_data_loss = full_data
+                best_loss = current_loss
+                best_epoch = epoch
+                best_state_dict = copy.deepcopy(pinn.state_dict())
+                improved = True
+        elif (not use_data) and current_loss < best_loss:
             best_loss = current_loss
             best_epoch = epoch
             best_state_dict = copy.deepcopy(pinn.state_dict())
+            improved = True
 
-            if save_model:
-                ckpt = {
-                    "epoch": epoch,
-                    "model_state_dict": best_state_dict,
-                    "optimizer_state_dict": optimizer.state_dict(),
-                    "loss": best_loss,
-                    "sigma_mode": sigma_mode,
-                    "stationary": stationary,
-                    "call_put": getattr(pinn, "call_put", None),
-                    "x_min": getattr(pinn, "x_min", None),
-                    "x_max": getattr(pinn, "x_max", None),
-                    "X_max": getattr(pinn, "X_max", None),
-                    "T": getattr(pinn, "T", None),
-                    "r_max": getattr(pinn, "r_max", None),
-                    "xi0_max": getattr(pinn, "xi0_max", None),
-                    "omega_max": getattr(pinn, "omega_max", None),
-                    "kappa_max": getattr(pinn, "kappa_max", None),
-                    "v_max": getattr(pinn, "v_max", None),
-                    "kappa_floor": getattr(pinn, "kappa_floor", None),
-                    "hidden": pinn.hidden,
-                    "depth": pinn.depth,
-                    "lambda_data": float(lambda_data),
-                    "hybrid_supervised": bool(use_data),
-                }
-                if extra_checkpoint_meta:
-                    ckpt.update(extra_checkpoint_meta)
-                torch.save(ckpt, best_model_path)
+        if improved and save_model:
+            ckpt = {
+                "epoch": epoch,
+                "model_state_dict": best_state_dict,
+                "optimizer_state_dict": optimizer.state_dict(),
+                "loss": best_loss,
+                "data_full_loss": (
+                    best_data_loss if use_data else None
+                ),
+                "sigma_mode": sigma_mode,
+                "stationary": stationary,
+                "call_put": getattr(pinn, "call_put", None),
+                "x_min": getattr(pinn, "x_min", None),
+                "x_max": getattr(pinn, "x_max", None),
+                "X_max": getattr(pinn, "X_max", None),
+                "T": getattr(pinn, "T", None),
+                "r_max": getattr(pinn, "r_max", None),
+                "xi0_max": getattr(pinn, "xi0_max", None),
+                "omega_max": getattr(pinn, "omega_max", None),
+                "kappa_max": getattr(pinn, "kappa_max", None),
+                "v_max": getattr(pinn, "v_max", None),
+                "kappa_floor": getattr(pinn, "kappa_floor", None),
+                "hidden": pinn.hidden,
+                "depth": pinn.depth,
+                "lambda_data": float(lambda_data),
+                "hybrid_supervised": bool(use_data),
+            }
+            if extra_checkpoint_meta:
+                ckpt.update(extra_checkpoint_meta)
+            torch.save(ckpt, best_model_path)
 
         if epoch % print_every == 0 or epoch == 1:
             grad_norm_str = (
                 f"{float(grad_norm):.3e}" if grad_norm is not None else "None"
+            )
+            best_str = (
+                f"BestData: {best_data_loss:.6e} @ {best_epoch}"
+                if use_data
+                else f"Best: {best_loss:.6e} @ {best_epoch}"
             )
             print(
                 f"Epoch {epoch:6d} | "
@@ -932,11 +977,12 @@ def train_network(
                 f"Boundary_x: {loss_boundary.item():.6e} | "
                 f"Data: {data_val:.6e} | "
                 f"GradNorm: {grad_norm_str} | "
-                f"Best: {best_loss:.6e} @ {best_epoch}"
+                f"{best_str}"
             )
 
     history["best_loss"] = best_loss
     history["best_epoch"] = best_epoch
+    history["best_data_loss"] = best_data_loss if use_data else None
 
     if best_state_dict is not None:
         pinn.load_state_dict(best_state_dict)

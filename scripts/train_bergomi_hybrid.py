@@ -138,10 +138,10 @@ def main():
         "--out-checkpoint",
         default="trained_models/bergomi_hybrid.pt",
     )
-    p.add_argument("--epochs", type=int, default=1200)
-    p.add_argument("--lr", type=float, default=3e-5)
+    p.add_argument("--epochs", type=int, default=1500)
+    p.add_argument("--lr", type=float, default=2e-5)
     p.add_argument("--weight-decay", type=float, default=1e-4)
-    p.add_argument("--lambda-data", type=float, default=5.0)
+    p.add_argument("--lambda-data", type=float, default=25.0)
     p.add_argument("--N-pde", type=int, default=4000)
     p.add_argument("--N-boundary", type=int, default=1500)
     p.add_argument("--N-data", type=int, default=256)

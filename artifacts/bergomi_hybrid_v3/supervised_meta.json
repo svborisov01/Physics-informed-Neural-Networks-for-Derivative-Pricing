@@ -1,0 +1,101 @@
+{
+  "train": {
+    "n_points": 270,
+    "K": 100.0,
+    "S_grid": [
+      70.0,
+      80.0,
+      90.0,
+      95.0,
+      100.0,
+      105.0,
+      110.0,
+      120.0,
+      140.0
+    ],
+    "tau_grid": [
+      0.25,
+      0.5,
+      0.75,
+      1.0,
+      1.25,
+      1.5
+    ],
+    "n_paths": 65536,
+    "n_steps": 96,
+    "seed": 123,
+    "smiles": [
+      "strong_vovol",
+      "strong_neg_skew",
+      "mild_fast_mr",
+      "slow_mr",
+      "near_bs"
+    ],
+    "u_target_mean": 0.13259607654623068,
+    "weight_mean": 0.7539569646061858
+  },
+  "val": {
+    "n_points": 54,
+    "K": 100.0,
+    "S_grid": [
+      70.0,
+      80.0,
+      90.0,
+      95.0,
+      100.0,
+      105.0,
+      110.0,
+      120.0,
+      140.0
+    ],
+    "tau_grid": [
+      0.25,
+      0.5,
+      0.75,
+      1.0,
+      1.25,
+      1.5
+    ],
+    "n_paths": 65536,
+    "n_steps": 96,
+    "seed": 999,
+    "smiles": [
+      "baseline"
+    ],
+    "u_target_mean": 0.13403604427455063,
+    "weight_mean": 0.751677792075606
+  },
+  "delta": {
+    "n_points": 100,
+    "K": 100.0,
+    "S_list": [
+      90.0,
+      95.0,
+      100.0,
+      105.0,
+      110.0
+    ],
+    "tau_list": [
+      0.4,
+      0.75,
+      1.0,
+      1.4
+    ],
+    "n_paths": 65536,
+    "n_steps": 128,
+    "seed": 321,
+    "smiles": [
+      "strong_vovol",
+      "strong_neg_skew",
+      "mild_fast_mr",
+      "slow_mr",
+      "near_bs"
+    ],
+    "delta_mean": 0.6362314669573657
+  },
+  "holdout_smile": "baseline",
+  "init_checkpoint": "trained_models/bergomi.pt",
+  "lambda_data": 25.0,
+  "lambda_delta": 8.0,
+  "lambda_otm": 5.0
+}

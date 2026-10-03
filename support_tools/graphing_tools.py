@@ -72,6 +72,8 @@ def save_surface_3d_html(
     colorscale: str = "Viridis",
 ):
     """Save an interactive Plotly 3D surface (S, tau, Z) as HTML."""
+    if go is None:
+        raise ImportError("plotly is required for save_surface_3d_html")
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
 

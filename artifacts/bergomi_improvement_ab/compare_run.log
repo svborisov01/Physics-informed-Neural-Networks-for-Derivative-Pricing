@@ -1,0 +1,35 @@
+OLD head {'corr_scale0': 0.15, 'omega_gate_power': 1.0, 'price_softplus_beta': 0.0, 'corr_activation': 'tanh', 'ckpt_loss': 0.0001322944153798744}
+NEW head {'loss': 0.0003000707656610757, 'epoch': 2605, 'corr_scale0': 0.35, 'omega_gate_power': 0.5, 'price_softplus_beta': 40.0, 'corr_activation': 'softsign'}
+QMC+ADD reference…
+OLD abs norms {'L1': 0.10643542744520378, 'L2': 0.1347370528135583, 'Linf': 0.32067164774365864, 'MAE': 0.10643542744520378, 'RMSE': 0.1347370528135583}
+NEW abs norms {'L1': 0.3772233629379461, 'L2': 0.4913140512430384, 'Linf': 1.1179269682420792, 'MAE': 0.3772233629379461, 'RMSE': 0.4913140512430384}
+L1 improvement -0.2707879354927423 (-254.4%)
+neg prices OLD 120 NEW 0 min NEW 0.4887566864490509
+
+Greeks A/B vs QMC+ADD
+S= 70.0 τ=0.4 |V| old=0.054 new=0.822 |Δ| old=0.0138 new=0.0310 Vnew=0.825
+S= 70.0 τ=1.0 |V| old=0.080 new=1.004 |Δ| old=0.0269 new=0.0097 Vnew=1.234
+S= 70.0 τ=1.4 |V| old=0.036 new=0.898 |Δ| old=0.0248 new=0.0191 Vnew=1.593
+S= 85.0 τ=0.4 |V| old=0.205 new=1.072 |Δ| old=0.0143 new=0.0247 Vnew=1.588
+S= 85.0 τ=1.0 |V| old=0.274 new=0.510 |Δ| old=0.0049 new=0.0593 Vnew=3.292
+S= 85.0 τ=1.4 |V| old=0.140 new=0.194 |Δ| old=0.0098 new=0.0470 Vnew=4.649
+S=100.0 τ=0.4 |V| old=0.128 new=0.250 |Δ| old=0.0213 new=0.0532 Vnew=6.121
+S=100.0 τ=1.0 |V| old=0.049 new=0.028 |Δ| old=0.0200 new=0.0245 Vnew=10.348
+S=100.0 τ=1.4 |V| old=0.073 new=0.115 |Δ| old=0.0150 new=0.0137 Vnew=12.656
+S=115.0 τ=0.4 |V| old=0.061 new=0.241 |Δ| old=0.0016 new=0.0025 Vnew=17.494
+S=115.0 τ=1.0 |V| old=0.133 new=0.293 |Δ| old=0.0015 new=0.0044 Vnew=21.688
+S=115.0 τ=1.4 |V| old=0.232 new=0.252 |Δ| old=0.0026 new=0.0043 Vnew=24.237
+S=140.0 τ=0.4 |V| old=0.002 new=0.208 |Δ| old=0.0019 new=0.0013 Vnew=41.811
+S=140.0 τ=1.0 |V| old=0.006 new=0.147 |Δ| old=0.0056 new=0.0086 Vnew=45.166
+S=140.0 τ=1.4 |V| old=0.133 new=0.088 |Δ| old=0.0053 new=0.0159 Vnew=47.596
+
+Mean |V| err old=0.1070 new=0.4081
+Mean |Δ| err old=0.0113 new=0.0213
+
+Extra smile L1
+strong_vovol L1 old 0.19535705605382128 new 0.45771364633291556 dL1 -0.2623565902790943
+strong_neg_skew L1 old 0.22265253707466082 new 0.5141147073016471 dL1 -0.2914621702269863
+slow_mr L1 old 0.28894646136277924 new 0.46054669716367147 dL1 -0.17160023580089223
+near_bs L1 old 0.006888507984401569 new 0.4336439980673294 dL1 -0.42675549008292785
+
+DONE artifacts/bergomi_improvement_ab

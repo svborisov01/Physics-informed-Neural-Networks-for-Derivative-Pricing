@@ -165,6 +165,11 @@ def _sample_interior(pinn, N_points):
     drawn from a truncated stationary Gaussian N(0, 1/(2 kappa)) so that the
     implied variance v(X) stays in a realistic range (unlike uniform X x omega
     sampling, which produced v up to O(10-100) and broke training).
+
+    Adaptive emphasis:
+      - ~70% of x near ATM
+      - omega biased high (Beta(2.5, 1.2) on [0, omega_max])
+      - kappa biased low (more mass near kappa_floor; hard smile regimes)
     """
     device = next(pinn.parameters()).device
     dtype = next(pinn.parameters()).dtype
@@ -173,9 +178,9 @@ def _sample_interior(pinn, N_points):
     kappa_floor = float(getattr(pinn, "kappa_floor", 0.25))
     kappa_floor = min(kappa_floor, 0.99 * float(pinn.kappa_max))
     kappa_floor = max(kappa_floor, 1e-3)
-    kappa = kappa_floor + (pinn.kappa_max - kappa_floor) * torch.rand(
-        N_points, 1, device=device, dtype=dtype
-    )
+    # Low-kappa bias: u^2 stretches mass toward the floor
+    u_k = torch.rand(N_points, 1, device=device, dtype=dtype)
+    kappa = kappa_floor + (pinn.kappa_max - kappa_floor) * (u_k ** 2)
 
     # Stationary OU scale: std = 1/sqrt(2 kappa)
     ou_std = 1.0 / torch.sqrt(2.0 * kappa)
@@ -183,13 +188,13 @@ def _sample_interior(pinn, N_points):
         -pinn.X_max, pinn.X_max
     )
 
-    # Oversample near ATM (x≈0): absolute pricing error and payoff kink concentrate there
-    n_atm = N_points // 2
+    # Oversample near ATM (x≈0): ~70% concentrated, 30% uniform
+    n_atm = int(round(0.70 * N_points))
     n_unif = N_points - n_atm
     x_unif = pinn.x_min + (pinn.x_max - pinn.x_min) * torch.rand(
         n_unif, 1, device=device, dtype=dtype
     )
-    x_atm = (0.15 * torch.randn(n_atm, 1, device=device, dtype=dtype)).clamp(
+    x_atm = (0.12 * torch.randn(n_atm, 1, device=device, dtype=dtype)).clamp(
         pinn.x_min, pinn.x_max
     )
     x = torch.cat([x_unif, x_atm], dim=0)
@@ -210,16 +215,34 @@ def _sample_interior(pinn, N_points):
     xi0 = 1e-4 + (pinn.xi0_max - 1e-4) * torch.rand(
         N_points, 1, device=device, dtype=dtype
     )
-    omega = 1e-4 + (pinn.omega_max - 1e-4) * torch.rand(
-        N_points, 1, device=device, dtype=dtype
+    # High-omega bias via Beta(2.5, 1.2) (mean ≈ 0.68 of omega_max)
+    omega_unit = torch.distributions.Beta(
+        torch.tensor(2.5, device=device, dtype=dtype),
+        torch.tensor(1.2, device=device, dtype=dtype),
+    ).sample((N_points, 1))
+    omega = (1e-4 + (pinn.omega_max - 1e-4) * omega_unit).clamp(
+        1e-4, pinn.omega_max
     )
     rho = -0.95 + 1.90 * torch.rand(N_points, 1, device=device, dtype=dtype)
 
     return x, X, tau, r, xi0, omega, kappa, rho
 
 
+def _soft_positive_price(u, beta: float = 40.0):
+    """
+    Soft positivity for normalized European prices.
+
+    softplus_beta(u) ≈ u for moderate/large positive u, and floors small
+    negatives that the correction head can otherwise produce OTM.
+    beta <= 0 disables the transform (legacy checkpoints).
+    """
+    if beta is None or float(beta) <= 0.0:
+        return u
+    return torch.nn.functional.softplus(u, beta=float(beta))
+
+
 def _total_price(pinn, x, X, tau, r, xi0, omega, kappa, rho, sigma_mode, stationary):
-    """Build u = u_BS + U at collocation points."""
+    """Build u = softplus(u_BS + U) at collocation points."""
     U = pinn.forward_x(x, X, tau, r, xi0, omega, kappa, rho)
 
     if stationary:
@@ -241,7 +264,10 @@ def _total_price(pinn, x, X, tau, r, xi0, omega, kappa, rho, sigma_mode, station
     u_bs = bs_option_normalized_from_x(
         x=x, tau=tau, r=r, sigma_bs=sigma_bs, call_put=pinn.call_put
     )
-    return u_bs + U, u_bs, v
+    u_raw = u_bs + U
+    beta = float(getattr(pinn, "price_softplus_beta", 40.0))
+    u = _soft_positive_price(u_raw, beta=beta)
+    return u, u_bs, v
 
 
 # ============================================================
@@ -328,7 +354,8 @@ def spot_terminal_condition_x(
     u_bs = bs_option_normalized_from_x(
         x=x, tau=tau_safe, r=r, sigma_bs=sigma_bs, call_put=pinn.call_put
     )
-    u_total = u_bs + U
+    beta = float(getattr(pinn, "price_softplus_beta", 40.0))
+    u_total = _soft_positive_price(u_bs + U, beta=beta)
 
     cp = pinn.call_put.lower()
     if cp == "call":
@@ -438,6 +465,10 @@ class PINN(nn.Module):
         depth=4,
         v_max=1.0,
         kappa_floor=0.25,
+        price_softplus_beta=40.0,
+        corr_scale0=0.35,
+        omega_gate_power=0.5,
+        corr_activation="softsign",
     ):
         super().__init__()
 
@@ -453,6 +484,15 @@ class PINN(nn.Module):
         self.kappa_max = float(kappa_max)
         self.v_max = float(v_max)
         self.kappa_floor = float(kappa_floor)
+        self.price_softplus_beta = float(price_softplus_beta)
+        self.corr_scale0 = float(corr_scale0)
+        self.omega_gate_power = float(omega_gate_power)
+        act = str(corr_activation).lower().strip()
+        if act not in ("softsign", "tanh"):
+            raise ValueError(
+                f"corr_activation must be 'softsign' or 'tanh', got {corr_activation!r}"
+            )
+        self.corr_activation = act
         self.call_put = call_put
         self.depth = depth
         self.hidden = hidden
@@ -537,11 +577,20 @@ class PINN(nn.Module):
     def forward_x(self, x, X, tau, r, xi0, omega, kappa, rho):
         features = self._features_from_x(x, X, tau, r, xi0, omega, kappa, rho)
         raw = self.net(features)
-        # Keep U small vs the BS baseline. Gate by omega so U -> 0 as omega -> 0
-        # (Bergomi collapses to Black–Scholes when vol-of-variance vanishes).
-        omega_gate = (omega / max(self.omega_max, 1e-6)).clamp(0.0, 1.0)
-        corr_scale = 0.15 * (0.5 + tau / self.T) * (1.0 + 0.25 * torch.abs(x))
-        return omega_gate * corr_scale * torch.tanh(raw)
+        # Freer correction head: larger scale, sqrt(omega) gate (still U->0 as
+        # omega->0), softsign instead of tanh so ATM Delta can move further.
+        # Legacy checkpoints use tanh + linear omega gate + scale0=0.15.
+        w = (omega / max(self.omega_max, 1e-6)).clamp(0.0, 1.0)
+        power = float(getattr(self, "omega_gate_power", 0.5))
+        omega_gate = torch.pow(w, power)
+        scale0 = float(getattr(self, "corr_scale0", 0.35))
+        corr_scale = scale0 * (0.5 + tau / self.T) * (1.0 + 0.25 * torch.abs(x))
+        act = getattr(self, "corr_activation", "softsign")
+        if act == "tanh":
+            gated = torch.tanh(raw)
+        else:
+            gated = torch.nn.functional.softsign(raw)
+        return omega_gate * corr_scale * gated
 
     def forward(self, S, K, X, tau, r, xi0, omega, kappa, rho):
         eps = 1e-8
@@ -619,7 +668,8 @@ class PINN(nn.Module):
                 sigma_bs=sigma_bs,
                 call_put=self.call_put,
             )
-            return u_bs + U
+            beta = float(getattr(self, "price_softplus_beta", 40.0))
+            return _soft_positive_price(u_bs + U, beta=beta)
 
     def predict_price(
         self,
@@ -809,6 +859,16 @@ def train_network(
                         "kappa_max": getattr(pinn, "kappa_max", None),
                         "v_max": getattr(pinn, "v_max", None),
                         "kappa_floor": getattr(pinn, "kappa_floor", None),
+                        "price_softplus_beta": getattr(
+                            pinn, "price_softplus_beta", 40.0
+                        ),
+                        "corr_scale0": getattr(pinn, "corr_scale0", 0.35),
+                        "omega_gate_power": getattr(
+                            pinn, "omega_gate_power", 0.5
+                        ),
+                        "corr_activation": getattr(
+                            pinn, "corr_activation", "softsign"
+                        ),
                         "hidden": pinn.hidden,
                         "depth": pinn.depth,
                     },

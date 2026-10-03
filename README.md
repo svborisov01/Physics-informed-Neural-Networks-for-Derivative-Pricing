@@ -114,7 +114,7 @@ python scripts/run_bergomi_extensive_tests.py \
   --n-paths-price 131072 --n-paths-greeks 131072 --n-steps 128
 ```
 
-Uses scrambled Sobol QMC with antithetic differencing (ADD) for fine-grid price norms, smile-parameter heatmaps on \((\tau,S)\), and PINN vs QMC+ADD Greeks. See `artifacts/bergomi_extensive_tests/SUMMARY.md`.
+Uses scrambled Sobol QMC with antithetic differencing (ADD) for fine-grid price norms, smile-parameter heatmaps on \((\tau,S)\), PINN vs QMC+ADD Greeks, and negativity checks under the softplus-β=400 base model. See `artifacts/bergomi_extensive_tests/SUMMARY.md`.
 
 ## Pre-trained Checkpoints
 

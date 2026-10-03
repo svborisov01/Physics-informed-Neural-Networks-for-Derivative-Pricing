@@ -868,6 +868,7 @@ def train_network(
     extra_checkpoint_meta=None,
     selection_metric="auto",
     early_stop_patience=None,
+    min_epochs_for_early_stop=0,
 ):
     """
     Train Bergomi PINN.
@@ -1251,6 +1252,7 @@ def train_network(
         if (
             early_stop_patience is not None
             and selection_metric != "total"
+            and epoch >= int(min_epochs_for_early_stop)
             and epochs_since_improve >= int(early_stop_patience)
         ):
             print(

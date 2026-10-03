@@ -152,7 +152,13 @@ def main():
     p.add_argument("--n-steps", type=int, default=96)
     p.add_argument("--delta-paths", type=int, default=65_536)
     p.add_argument("--print-every", type=int, default=50)
-    p.add_argument("--patience", type=int, default=12)
+    p.add_argument("--patience", type=int, default=16)
+    p.add_argument(
+        "--min-epochs",
+        type=int,
+        default=400,
+        help="Do not early-stop before this epoch (lets OTM/Delta terms bite)",
+    )
     p.add_argument(
         "--holdout-smile",
         default="baseline",
@@ -262,6 +268,7 @@ def main():
         cosine_T0=400,
         selection_metric="val_l1",
         early_stop_patience=args.patience,
+        min_epochs_for_early_stop=args.min_epochs,
         extra_checkpoint_meta=dict(
             hybrid_version="v3",
             hybrid_init=str(init_ckpt),

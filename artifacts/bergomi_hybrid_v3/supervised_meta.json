@@ -94,8 +94,8 @@
     "delta_mean": 0.6362314669573657
   },
   "holdout_smile": "baseline",
-  "init_checkpoint": "trained_models/bergomi_hybrid.pt",
+  "init_checkpoint": "trained_models/bergomi.pt",
   "lambda_data": 25.0,
-  "lambda_delta": 5.0,
-  "lambda_otm": 2.0
+  "lambda_delta": 8.0,
+  "lambda_otm": 5.0
 }

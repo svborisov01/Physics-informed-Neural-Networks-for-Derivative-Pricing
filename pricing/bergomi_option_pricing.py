@@ -218,8 +218,20 @@ def _sample_interior(pinn, N_points):
     return x, X, tau, r, xi0, omega, kappa, rho
 
 
+def _soft_positive_price(u, beta: float = 40.0):
+    """
+    Soft positivity for normalized European prices.
+
+    Uses softplus (not softmax): softplus_β(u) = log(1+exp(βu))/β > 0,
+    ≈ u for moderate/large positive u. beta <= 0 disables the map.
+    """
+    if beta is None or float(beta) <= 0.0:
+        return u
+    return torch.nn.functional.softplus(u, beta=float(beta))
+
+
 def _total_price(pinn, x, X, tau, r, xi0, omega, kappa, rho, sigma_mode, stationary):
-    """Build u = u_BS + U at collocation points."""
+    """Build u = softplus(u_BS + U) at collocation points (if enabled)."""
     U = pinn.forward_x(x, X, tau, r, xi0, omega, kappa, rho)
 
     if stationary:
@@ -241,7 +253,10 @@ def _total_price(pinn, x, X, tau, r, xi0, omega, kappa, rho, sigma_mode, station
     u_bs = bs_option_normalized_from_x(
         x=x, tau=tau, r=r, sigma_bs=sigma_bs, call_put=pinn.call_put
     )
-    return u_bs + U, u_bs, v
+    u_raw = u_bs + U
+    beta = float(getattr(pinn, "price_softplus_beta", 0.0))
+    u = _soft_positive_price(u_raw, beta=beta)
+    return u, u_bs, v
 
 
 # ============================================================
@@ -328,7 +343,8 @@ def spot_terminal_condition_x(
     u_bs = bs_option_normalized_from_x(
         x=x, tau=tau_safe, r=r, sigma_bs=sigma_bs, call_put=pinn.call_put
     )
-    u_total = u_bs + U
+    beta = float(getattr(pinn, "price_softplus_beta", 0.0))
+    u_total = _soft_positive_price(u_bs + U, beta=beta)
 
     cp = pinn.call_put.lower()
     if cp == "call":
@@ -438,6 +454,7 @@ class PINN(nn.Module):
         depth=4,
         v_max=1.0,
         kappa_floor=0.25,
+        price_softplus_beta=0.0,
     ):
         super().__init__()
 
@@ -453,6 +470,7 @@ class PINN(nn.Module):
         self.kappa_max = float(kappa_max)
         self.v_max = float(v_max)
         self.kappa_floor = float(kappa_floor)
+        self.price_softplus_beta = float(price_softplus_beta)
         self.call_put = call_put
         self.depth = depth
         self.hidden = hidden
@@ -619,7 +637,8 @@ class PINN(nn.Module):
                 sigma_bs=sigma_bs,
                 call_put=self.call_put,
             )
-            return u_bs + U
+            beta = float(getattr(self, "price_softplus_beta", 0.0))
+            return _soft_positive_price(u_bs + U, beta=beta)
 
     def predict_price(
         self,
@@ -1207,6 +1226,9 @@ def train_network(
                 "kappa_max": getattr(pinn, "kappa_max", None),
                 "v_max": getattr(pinn, "v_max", None),
                 "kappa_floor": getattr(pinn, "kappa_floor", None),
+                "price_softplus_beta": getattr(
+                    pinn, "price_softplus_beta", 0.0
+                ),
                 "hidden": pinn.hidden,
                 "depth": pinn.depth,
                 "lambda_data": float(lambda_data),

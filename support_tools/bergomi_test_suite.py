@@ -780,7 +780,7 @@ def write_extensive_tests_summary(report: dict, path: Path) -> None:
         "",
         "### Error heatmaps (τ, S)",
         "`smile_heatmaps/heatmap_*.png` — one per smile set; title states "
-        "$(ξ₀,ω,κ,ρ,X)$.",
+        r"\((ξ₀,ω,κ,ρ,X)\).",
         "",
         "### 3D surfaces (price + key Greeks)",
         "`surfaces_3d/<smile>/3d_*.png` (interactive HTML alongside):",

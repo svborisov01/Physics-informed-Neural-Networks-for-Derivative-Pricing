@@ -8,7 +8,11 @@
     "hidden": 128,
     "depth": 4,
     "epoch": 1149,
-    "loss": 0.0001322944153798744
+    "loss": 0.0001322944153798744,
+    "price_softplus_beta": 400.0,
+    "positivity": "softplus",
+    "softplus_mode": "inference_wrap_base",
+    "runtime_softplus_beta": 400.0
   },
   "method": "scrambled Sobol QMC + antithetic differencing (ADD)",
   "fine_grid": {
@@ -40,18 +44,24 @@
       "n_steps": 128
     },
     "abs_norms": {
-      "L1": 0.10643542744520378,
-      "L2": 0.1347370528135583,
+      "L1": 0.11017964690265607,
+      "L2": 0.1372598487458012,
       "Linf": 0.32067164774365864,
-      "MAE": 0.10643542744520378,
-      "RMSE": 0.1347370528135583
+      "MAE": 0.11017964690265607,
+      "RMSE": 0.1372598487458012
     },
     "rel_norms": {
-      "L1": 0.03023787463786936,
-      "L2": 0.056406902150437414,
-      "Linf": 0.2610931732735566,
-      "MAE": 0.03023787463786936,
-      "RMSE": 0.056406902150437414
+      "L1": 0.03373101395710195,
+      "L2": 0.061035863820853783,
+      "Linf": 0.19415849414753306,
+      "MAE": 0.03373101395710195,
+      "RMSE": 0.061035863820853783
+    },
+    "positivity": {
+      "n_negative": 0,
+      "n_total": 1479,
+      "min_price": 0.09611944109201431,
+      "frac_negative": 0.0
     },
     "mean_mc_stderr": 0.01613357295743801,
     "max_mc_stderr": 0.033914636357161465,
@@ -91,18 +101,24 @@
         "n_steps": 128
       },
       "abs_norms": {
-        "L1": 0.1171126480071312,
-        "L2": 0.14388028808494438,
-        "Linf": 0.2965690727949357,
-        "MAE": 0.1171126480071312,
-        "RMSE": 0.14388028808494438
+        "L1": 0.12660019708314912,
+        "L2": 0.15145587248519862,
+        "Linf": 0.2965941067457414,
+        "MAE": 0.12660019708314912,
+        "RMSE": 0.15145587248519862
       },
       "rel_norms": {
-        "L1": 0.028052425190499254,
-        "L2": 0.048270713182462364,
-        "Linf": 0.14077457608524666,
-        "MAE": 0.028052425190499254,
-        "RMSE": 0.048270713182462364
+        "L1": 0.03666724913776259,
+        "L2": 0.06420768869096272,
+        "Linf": 0.18848206593117572,
+        "MAE": 0.03666724913776259,
+        "RMSE": 0.06420768869096272
+      },
+      "positivity": {
+        "n_negative": 0,
+        "n_total": 609,
+        "min_price": 0.13817700743675232,
+        "frac_negative": 0.0
       },
       "mean_mc_stderr": 0.016599907194511914,
       "max_mc_stderr": 0.03079176743926636,
@@ -142,18 +158,24 @@
         "n_steps": 128
       },
       "abs_norms": {
-        "L1": 0.1913798442013515,
-        "L2": 0.2261162338403959,
+        "L1": 0.19500705586199182,
+        "L2": 0.2280587384381639,
         "Linf": 0.5072921542937792,
-        "MAE": 0.1913798442013515,
-        "RMSE": 0.2261162338403959
+        "MAE": 0.19500705586199182,
+        "RMSE": 0.2280587384381639
       },
       "rel_norms": {
-        "L1": 0.03973160807598547,
-        "L2": 0.06722435088424421,
-        "Linf": 0.2208328316999353,
-        "MAE": 0.03973160807598547,
-        "RMSE": 0.06722435088424421
+        "L1": 0.043137636086465925,
+        "L2": 0.07241971214637885,
+        "Linf": 0.22321145823179483,
+        "MAE": 0.043137636086465925,
+        "RMSE": 0.07241971214637885
+      },
+      "positivity": {
+        "n_negative": 0,
+        "n_total": 609,
+        "min_price": 0.0865020602941513,
+        "frac_negative": 0.0
       },
       "mean_mc_stderr": 0.017525857691162983,
       "max_mc_stderr": 0.03898795521388147,
@@ -193,18 +215,24 @@
         "n_steps": 128
       },
       "abs_norms": {
-        "L1": 0.22759931976653613,
-        "L2": 0.27781592652935894,
-        "Linf": 0.5865651874134112,
-        "MAE": 0.22759931976653613,
-        "RMSE": 0.27781592652935894
+        "L1": 0.2368977766116204,
+        "L2": 0.2840252225220876,
+        "Linf": 0.5865842608997394,
+        "MAE": 0.2368977766116204,
+        "RMSE": 0.2840252225220876
       },
       "rel_norms": {
-        "L1": 0.0643986626502363,
-        "L2": 0.11301899642456308,
-        "Linf": 0.31990149912173405,
-        "MAE": 0.0643986626502363,
-        "RMSE": 0.11301899642456308
+        "L1": 0.07326770624056611,
+        "L2": 0.12556363027328804,
+        "Linf": 0.3289735972731349,
+        "MAE": 0.07326770624056611,
+        "RMSE": 0.12556363027328804
+      },
+      "positivity": {
+        "n_negative": 0,
+        "n_total": 609,
+        "min_price": 0.15484189987182617,
+        "frac_negative": 0.0
       },
       "mean_mc_stderr": 0.012891971549388271,
       "max_mc_stderr": 0.026025453049046424,
@@ -244,18 +272,24 @@
         "n_steps": 128
       },
       "abs_norms": {
-        "L1": 0.05269095433783704,
-        "L2": 0.06353308757911595,
+        "L1": 0.06109017156372964,
+        "L2": 0.07615711192723701,
         "Linf": 0.20532902784197304,
-        "MAE": 0.05269095433783704,
-        "RMSE": 0.06353308757911595
+        "MAE": 0.06109017156372964,
+        "RMSE": 0.07615711192723701
       },
       "rel_norms": {
-        "L1": 0.010317629566949489,
-        "L2": 0.0183202472696228,
-        "Linf": 0.05965315537771369,
-        "MAE": 0.010317629566949489,
-        "RMSE": 0.0183202472696228
+        "L1": 0.01777940084483418,
+        "L2": 0.042287550617312576,
+        "Linf": 0.18926991095909193,
+        "MAE": 0.01777940084483418,
+        "RMSE": 0.042287550617312576
+      },
+      "positivity": {
+        "n_negative": 0,
+        "n_total": 609,
+        "min_price": 0.1854647547006607,
+        "frac_negative": 0.0
       },
       "mean_mc_stderr": 0.01841890780458308,
       "max_mc_stderr": 0.035613249261090045,
@@ -295,18 +329,24 @@
         "n_steps": 128
       },
       "abs_norms": {
-        "L1": 0.2867210094600547,
-        "L2": 0.36121003417033987,
+        "L1": 0.28593011934993734,
+        "L2": 0.3604335941418278,
         "Linf": 0.9193108723727903,
-        "MAE": 0.2867210094600547,
-        "RMSE": 0.36121003417033987
+        "MAE": 0.28593011934993734,
+        "RMSE": 0.3604335941418278
       },
       "rel_norms": {
-        "L1": 0.04451667684789969,
-        "L2": 0.07050148598391628,
-        "Linf": 0.24034214784591532,
-        "MAE": 0.04451667684789969,
-        "RMSE": 0.07050148598391628
+        "L1": 0.043635954165065716,
+        "L2": 0.06606306841451311,
+        "Linf": 0.19610283285612545,
+        "MAE": 0.043635954165065716,
+        "RMSE": 0.06606306841451311
+      },
+      "positivity": {
+        "n_negative": 0,
+        "n_total": 609,
+        "min_price": 0.08561061322689056,
+        "frac_negative": 0.0
       },
       "mean_mc_stderr": 0.012836828274418868,
       "max_mc_stderr": 0.02984682843421053,
@@ -346,18 +386,24 @@
         "n_steps": 128
       },
       "abs_norms": {
-        "L1": 0.005349705644407357,
-        "L2": 0.006916203891601157,
-        "Linf": 0.02516907349096975,
-        "MAE": 0.005349705644407357,
-        "RMSE": 0.006916203891601157
+        "L1": 0.014147770867282828,
+        "L2": 0.033518721826173825,
+        "Linf": 0.1715957334426467,
+        "MAE": 0.014147770867282828,
+        "RMSE": 0.033518721826173825
       },
       "rel_norms": {
-        "L1": 0.0007313055873098893,
-        "L2": 0.0012196886446453458,
-        "Linf": 0.006034718387039068,
-        "MAE": 0.0007313055873098893,
-        "RMSE": 0.0012196886446453458
+        "L1": 0.008534193718667567,
+        "L2": 0.03056286273382044,
+        "Linf": 0.1714999840236958,
+        "MAE": 0.008534193718667567,
+        "RMSE": 0.03056286273382044
+      },
+      "positivity": {
+        "n_negative": 0,
+        "n_total": 609,
+        "min_price": 0.172154039144516,
+        "frac_negative": 0.0
       },
       "mean_mc_stderr": 0.01901579947438219,
       "max_mc_stderr": 0.03673323927041914,
@@ -386,25 +432,25 @@
       "n_paths_qmc_add": 131072,
       "n_steps": 160,
       "price_norms": {
-        "L1": 0.11140475615725517,
-        "L2": 0.14167261093079697,
-        "Linf": 0.30237731195182915,
-        "MAE": 0.11140475615725517,
-        "RMSE": 0.14167261093079697
+        "L1": 0.1242940350928241,
+        "L2": 0.15065954860858713,
+        "Linf": 0.30240806794853325,
+        "MAE": 0.1242940350928241,
+        "RMSE": 0.15065954860858713
       },
       "delta_norms": {
-        "L1": 0.010814854258822379,
-        "L2": 0.013901724959813105,
-        "Linf": 0.02685190134446891,
-        "MAE": 0.010814854258822379,
-        "RMSE": 0.013901724959813105
+        "L1": 0.008228366508299587,
+        "L2": 0.010638824917656406,
+        "Linf": 0.02227790539702479,
+        "MAE": 0.008228366508299587,
+        "RMSE": 0.010638824917656406
       },
       "theta_norms": {
-        "L1": 0.2573343305567498,
-        "L2": 0.297943310860635,
+        "L1": 0.24083292082921615,
+        "L2": 0.2870682414670214,
         "Linf": 0.5536086060451026,
-        "MAE": 0.2573343305567498,
-        "RMSE": 0.297943310860635
+        "MAE": 0.24083292082921615,
+        "RMSE": 0.2870682414670214
       },
       "artifacts": {
         "delta_heatmap": "artifacts/bergomi_extensive_tests/greeks/greeks_delta_abs_err_baseline.png",
@@ -428,25 +474,25 @@
       "n_paths_qmc_add": 131072,
       "n_steps": 160,
       "price_norms": {
-        "L1": 0.21706452122426306,
-        "L2": 0.25054239014757385,
+        "L1": 0.20197862192408156,
+        "L2": 0.24226067068516097,
         "Linf": 0.48459168649642237,
-        "MAE": 0.21706452122426306,
-        "RMSE": 0.25054239014757385
+        "MAE": 0.20197862192408156,
+        "RMSE": 0.24226067068516097
       },
       "delta_norms": {
-        "L1": 0.01847898020727049,
-        "L2": 0.024895649121909544,
-        "Linf": 0.050406290968431564,
-        "MAE": 0.01847898020727049,
-        "RMSE": 0.024895649121909544
+        "L1": 0.01149750874695789,
+        "L2": 0.01576250398356573,
+        "Linf": 0.038584564368038254,
+        "MAE": 0.01149750874695789,
+        "RMSE": 0.01576250398356573
       },
       "theta_norms": {
-        "L1": 0.4146523011212476,
-        "L2": 0.5008340020333478,
+        "L1": 0.41072028436237573,
+        "L2": 0.5030743308019457,
         "Linf": 0.9874138799585452,
-        "MAE": 0.4146523011212476,
-        "RMSE": 0.5008340020333478
+        "MAE": 0.41072028436237573,
+        "RMSE": 0.5030743308019457
       },
       "artifacts": {
         "delta_heatmap": "artifacts/bergomi_extensive_tests/greeks/greeks_delta_abs_err_strong_vovol.png",
@@ -470,30 +516,242 @@
       "n_paths_qmc_add": 131072,
       "n_steps": 160,
       "price_norms": {
-        "L1": 0.22239005001834639,
-        "L2": 0.2741812571530179,
-        "Linf": 0.5659063702433818,
-        "MAE": 0.22239005001834639,
-        "RMSE": 0.2741812571530179
+        "L1": 0.2372764471728705,
+        "L2": 0.2828669513121338,
+        "Linf": 0.5659318810313456,
+        "MAE": 0.2372764471728705,
+        "RMSE": 0.2828669513121338
       },
       "delta_norms": {
-        "L1": 0.019203851793225576,
-        "L2": 0.024080560793405516,
-        "Linf": 0.04516551572529308,
-        "MAE": 0.019203851793225576,
-        "RMSE": 0.024080560793405516
+        "L1": 0.016877541623342505,
+        "L2": 0.021143494572522802,
+        "Linf": 0.03744762017466119,
+        "MAE": 0.016877541623342505,
+        "RMSE": 0.021143494572522802
       },
       "theta_norms": {
-        "L1": 0.3203000232570153,
-        "L2": 0.37508891809933453,
-        "Linf": 0.8335161422242967,
-        "MAE": 0.3203000232570153,
-        "RMSE": 0.37508891809933453
+        "L1": 0.2911866895847302,
+        "L2": 0.34252405027309407,
+        "Linf": 0.6832564090242235,
+        "MAE": 0.2911866895847302,
+        "RMSE": 0.34252405027309407
       },
       "artifacts": {
         "delta_heatmap": "artifacts/bergomi_extensive_tests/greeks/greeks_delta_abs_err_strong_neg_skew.png",
         "theta_heatmap": "artifacts/bergomi_extensive_tests/greeks/greeks_theta_abs_err_strong_neg_skew.png",
         "npz": "artifacts/bergomi_extensive_tests/greeks/greeks_strong_neg_skew.npz"
+      }
+    }
+  ],
+  "surfaces_3d": [
+    {
+      "smile": {
+        "name": "baseline",
+        "xi0": 0.04,
+        "omega": 1.0,
+        "kappa": 2.0,
+        "rho": -0.5,
+        "X": 0.0,
+        "r": 0.05,
+        "q": 0.0,
+        "stationary": true,
+        "sigma_mode": "spot_var"
+      },
+      "artifacts": {
+        "price_png": "artifacts/bergomi_extensive_tests/surfaces_3d/baseline/3d_price_baseline.png",
+        "price_html": "artifacts/bergomi_extensive_tests/surfaces_3d/baseline/3d_price_baseline.html",
+        "delta_png": "artifacts/bergomi_extensive_tests/surfaces_3d/baseline/3d_delta_baseline.png",
+        "delta_html": "artifacts/bergomi_extensive_tests/surfaces_3d/baseline/3d_delta_baseline.html",
+        "gamma_png": "artifacts/bergomi_extensive_tests/surfaces_3d/baseline/3d_gamma_baseline.png",
+        "gamma_html": "artifacts/bergomi_extensive_tests/surfaces_3d/baseline/3d_gamma_baseline.html",
+        "theta_png": "artifacts/bergomi_extensive_tests/surfaces_3d/baseline/3d_theta_baseline.png",
+        "theta_html": "artifacts/bergomi_extensive_tests/surfaces_3d/baseline/3d_theta_baseline.html",
+        "vega_png": "artifacts/bergomi_extensive_tests/surfaces_3d/baseline/3d_vega_baseline.png",
+        "vega_html": "artifacts/bergomi_extensive_tests/surfaces_3d/baseline/3d_vega_baseline.html",
+        "dual_X_png": "artifacts/bergomi_extensive_tests/surfaces_3d/baseline/3d_dual_X_baseline.png",
+        "dual_X_html": "artifacts/bergomi_extensive_tests/surfaces_3d/baseline/3d_dual_X_baseline.html",
+        "npz": "artifacts/bergomi_extensive_tests/surfaces_3d/baseline/surfaces_baseline.npz"
+      },
+      "error_3d": {
+        "abs_err_png": "artifacts/bergomi_extensive_tests/surfaces_3d/baseline/3d_abs_err_baseline.png",
+        "abs_err_html": "artifacts/bergomi_extensive_tests/surfaces_3d/baseline/3d_abs_err_baseline.html",
+        "rel_err_png": "artifacts/bergomi_extensive_tests/surfaces_3d/baseline/3d_rel_err_baseline.png",
+        "rel_err_html": "artifacts/bergomi_extensive_tests/surfaces_3d/baseline/3d_rel_err_baseline.html"
+      }
+    },
+    {
+      "smile": {
+        "name": "strong_vovol",
+        "xi0": 0.04,
+        "omega": 1.8,
+        "kappa": 2.0,
+        "rho": -0.5,
+        "X": 0.0,
+        "r": 0.05,
+        "q": 0.0,
+        "stationary": true,
+        "sigma_mode": "spot_var"
+      },
+      "artifacts": {
+        "price_png": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_vovol/3d_price_strong_vovol.png",
+        "price_html": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_vovol/3d_price_strong_vovol.html",
+        "delta_png": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_vovol/3d_delta_strong_vovol.png",
+        "delta_html": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_vovol/3d_delta_strong_vovol.html",
+        "gamma_png": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_vovol/3d_gamma_strong_vovol.png",
+        "gamma_html": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_vovol/3d_gamma_strong_vovol.html",
+        "theta_png": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_vovol/3d_theta_strong_vovol.png",
+        "theta_html": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_vovol/3d_theta_strong_vovol.html",
+        "vega_png": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_vovol/3d_vega_strong_vovol.png",
+        "vega_html": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_vovol/3d_vega_strong_vovol.html",
+        "dual_X_png": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_vovol/3d_dual_X_strong_vovol.png",
+        "dual_X_html": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_vovol/3d_dual_X_strong_vovol.html",
+        "npz": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_vovol/surfaces_strong_vovol.npz"
+      },
+      "error_3d": {
+        "abs_err_png": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_vovol/3d_abs_err_strong_vovol.png",
+        "abs_err_html": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_vovol/3d_abs_err_strong_vovol.html",
+        "rel_err_png": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_vovol/3d_rel_err_strong_vovol.png",
+        "rel_err_html": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_vovol/3d_rel_err_strong_vovol.html"
+      }
+    },
+    {
+      "smile": {
+        "name": "strong_neg_skew",
+        "xi0": 0.04,
+        "omega": 1.0,
+        "kappa": 2.0,
+        "rho": -0.85,
+        "X": 0.0,
+        "r": 0.05,
+        "q": 0.0,
+        "stationary": true,
+        "sigma_mode": "spot_var"
+      },
+      "artifacts": {
+        "price_png": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_neg_skew/3d_price_strong_neg_skew.png",
+        "price_html": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_neg_skew/3d_price_strong_neg_skew.html",
+        "delta_png": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_neg_skew/3d_delta_strong_neg_skew.png",
+        "delta_html": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_neg_skew/3d_delta_strong_neg_skew.html",
+        "gamma_png": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_neg_skew/3d_gamma_strong_neg_skew.png",
+        "gamma_html": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_neg_skew/3d_gamma_strong_neg_skew.html",
+        "theta_png": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_neg_skew/3d_theta_strong_neg_skew.png",
+        "theta_html": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_neg_skew/3d_theta_strong_neg_skew.html",
+        "vega_png": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_neg_skew/3d_vega_strong_neg_skew.png",
+        "vega_html": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_neg_skew/3d_vega_strong_neg_skew.html",
+        "dual_X_png": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_neg_skew/3d_dual_X_strong_neg_skew.png",
+        "dual_X_html": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_neg_skew/3d_dual_X_strong_neg_skew.html",
+        "npz": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_neg_skew/surfaces_strong_neg_skew.npz"
+      },
+      "error_3d": {
+        "abs_err_png": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_neg_skew/3d_abs_err_strong_neg_skew.png",
+        "abs_err_html": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_neg_skew/3d_abs_err_strong_neg_skew.html",
+        "rel_err_png": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_neg_skew/3d_rel_err_strong_neg_skew.png",
+        "rel_err_html": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_neg_skew/3d_rel_err_strong_neg_skew.html"
+      }
+    },
+    {
+      "smile": {
+        "name": "mild_fast_mr",
+        "xi0": 0.04,
+        "omega": 0.5,
+        "kappa": 4.0,
+        "rho": -0.3,
+        "X": 0.0,
+        "r": 0.05,
+        "q": 0.0,
+        "stationary": true,
+        "sigma_mode": "spot_var"
+      },
+      "artifacts": {
+        "price_png": "artifacts/bergomi_extensive_tests/surfaces_3d/mild_fast_mr/3d_price_mild_fast_mr.png",
+        "price_html": "artifacts/bergomi_extensive_tests/surfaces_3d/mild_fast_mr/3d_price_mild_fast_mr.html",
+        "delta_png": "artifacts/bergomi_extensive_tests/surfaces_3d/mild_fast_mr/3d_delta_mild_fast_mr.png",
+        "delta_html": "artifacts/bergomi_extensive_tests/surfaces_3d/mild_fast_mr/3d_delta_mild_fast_mr.html",
+        "gamma_png": "artifacts/bergomi_extensive_tests/surfaces_3d/mild_fast_mr/3d_gamma_mild_fast_mr.png",
+        "gamma_html": "artifacts/bergomi_extensive_tests/surfaces_3d/mild_fast_mr/3d_gamma_mild_fast_mr.html",
+        "theta_png": "artifacts/bergomi_extensive_tests/surfaces_3d/mild_fast_mr/3d_theta_mild_fast_mr.png",
+        "theta_html": "artifacts/bergomi_extensive_tests/surfaces_3d/mild_fast_mr/3d_theta_mild_fast_mr.html",
+        "vega_png": "artifacts/bergomi_extensive_tests/surfaces_3d/mild_fast_mr/3d_vega_mild_fast_mr.png",
+        "vega_html": "artifacts/bergomi_extensive_tests/surfaces_3d/mild_fast_mr/3d_vega_mild_fast_mr.html",
+        "dual_X_png": "artifacts/bergomi_extensive_tests/surfaces_3d/mild_fast_mr/3d_dual_X_mild_fast_mr.png",
+        "dual_X_html": "artifacts/bergomi_extensive_tests/surfaces_3d/mild_fast_mr/3d_dual_X_mild_fast_mr.html",
+        "npz": "artifacts/bergomi_extensive_tests/surfaces_3d/mild_fast_mr/surfaces_mild_fast_mr.npz"
+      },
+      "error_3d": {
+        "abs_err_png": "artifacts/bergomi_extensive_tests/surfaces_3d/mild_fast_mr/3d_abs_err_mild_fast_mr.png",
+        "abs_err_html": "artifacts/bergomi_extensive_tests/surfaces_3d/mild_fast_mr/3d_abs_err_mild_fast_mr.html",
+        "rel_err_png": "artifacts/bergomi_extensive_tests/surfaces_3d/mild_fast_mr/3d_rel_err_mild_fast_mr.png",
+        "rel_err_html": "artifacts/bergomi_extensive_tests/surfaces_3d/mild_fast_mr/3d_rel_err_mild_fast_mr.html"
+      }
+    },
+    {
+      "smile": {
+        "name": "slow_mr",
+        "xi0": 0.04,
+        "omega": 1.2,
+        "kappa": 0.6,
+        "rho": -0.6,
+        "X": 0.0,
+        "r": 0.05,
+        "q": 0.0,
+        "stationary": true,
+        "sigma_mode": "spot_var"
+      },
+      "artifacts": {
+        "price_png": "artifacts/bergomi_extensive_tests/surfaces_3d/slow_mr/3d_price_slow_mr.png",
+        "price_html": "artifacts/bergomi_extensive_tests/surfaces_3d/slow_mr/3d_price_slow_mr.html",
+        "delta_png": "artifacts/bergomi_extensive_tests/surfaces_3d/slow_mr/3d_delta_slow_mr.png",
+        "delta_html": "artifacts/bergomi_extensive_tests/surfaces_3d/slow_mr/3d_delta_slow_mr.html",
+        "gamma_png": "artifacts/bergomi_extensive_tests/surfaces_3d/slow_mr/3d_gamma_slow_mr.png",
+        "gamma_html": "artifacts/bergomi_extensive_tests/surfaces_3d/slow_mr/3d_gamma_slow_mr.html",
+        "theta_png": "artifacts/bergomi_extensive_tests/surfaces_3d/slow_mr/3d_theta_slow_mr.png",
+        "theta_html": "artifacts/bergomi_extensive_tests/surfaces_3d/slow_mr/3d_theta_slow_mr.html",
+        "vega_png": "artifacts/bergomi_extensive_tests/surfaces_3d/slow_mr/3d_vega_slow_mr.png",
+        "vega_html": "artifacts/bergomi_extensive_tests/surfaces_3d/slow_mr/3d_vega_slow_mr.html",
+        "dual_X_png": "artifacts/bergomi_extensive_tests/surfaces_3d/slow_mr/3d_dual_X_slow_mr.png",
+        "dual_X_html": "artifacts/bergomi_extensive_tests/surfaces_3d/slow_mr/3d_dual_X_slow_mr.html",
+        "npz": "artifacts/bergomi_extensive_tests/surfaces_3d/slow_mr/surfaces_slow_mr.npz"
+      },
+      "error_3d": {
+        "abs_err_png": "artifacts/bergomi_extensive_tests/surfaces_3d/slow_mr/3d_abs_err_slow_mr.png",
+        "abs_err_html": "artifacts/bergomi_extensive_tests/surfaces_3d/slow_mr/3d_abs_err_slow_mr.html",
+        "rel_err_png": "artifacts/bergomi_extensive_tests/surfaces_3d/slow_mr/3d_rel_err_slow_mr.png",
+        "rel_err_html": "artifacts/bergomi_extensive_tests/surfaces_3d/slow_mr/3d_rel_err_slow_mr.html"
+      }
+    },
+    {
+      "smile": {
+        "name": "near_bs",
+        "xi0": 0.04,
+        "omega": 0.05,
+        "kappa": 2.0,
+        "rho": 0.0,
+        "X": 0.0,
+        "r": 0.05,
+        "q": 0.0,
+        "stationary": true,
+        "sigma_mode": "spot_var"
+      },
+      "artifacts": {
+        "price_png": "artifacts/bergomi_extensive_tests/surfaces_3d/near_bs/3d_price_near_bs.png",
+        "price_html": "artifacts/bergomi_extensive_tests/surfaces_3d/near_bs/3d_price_near_bs.html",
+        "delta_png": "artifacts/bergomi_extensive_tests/surfaces_3d/near_bs/3d_delta_near_bs.png",
+        "delta_html": "artifacts/bergomi_extensive_tests/surfaces_3d/near_bs/3d_delta_near_bs.html",
+        "gamma_png": "artifacts/bergomi_extensive_tests/surfaces_3d/near_bs/3d_gamma_near_bs.png",
+        "gamma_html": "artifacts/bergomi_extensive_tests/surfaces_3d/near_bs/3d_gamma_near_bs.html",
+        "theta_png": "artifacts/bergomi_extensive_tests/surfaces_3d/near_bs/3d_theta_near_bs.png",
+        "theta_html": "artifacts/bergomi_extensive_tests/surfaces_3d/near_bs/3d_theta_near_bs.html",
+        "vega_png": "artifacts/bergomi_extensive_tests/surfaces_3d/near_bs/3d_vega_near_bs.png",
+        "vega_html": "artifacts/bergomi_extensive_tests/surfaces_3d/near_bs/3d_vega_near_bs.html",
+        "dual_X_png": "artifacts/bergomi_extensive_tests/surfaces_3d/near_bs/3d_dual_X_near_bs.png",
+        "dual_X_html": "artifacts/bergomi_extensive_tests/surfaces_3d/near_bs/3d_dual_X_near_bs.html",
+        "npz": "artifacts/bergomi_extensive_tests/surfaces_3d/near_bs/surfaces_near_bs.npz"
+      },
+      "error_3d": {
+        "abs_err_png": "artifacts/bergomi_extensive_tests/surfaces_3d/near_bs/3d_abs_err_near_bs.png",
+        "abs_err_html": "artifacts/bergomi_extensive_tests/surfaces_3d/near_bs/3d_abs_err_near_bs.html",
+        "rel_err_png": "artifacts/bergomi_extensive_tests/surfaces_3d/near_bs/3d_rel_err_near_bs.png",
+        "rel_err_html": "artifacts/bergomi_extensive_tests/surfaces_3d/near_bs/3d_rel_err_near_bs.html"
       }
     }
   ]

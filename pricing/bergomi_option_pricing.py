@@ -654,6 +654,67 @@ class PINN(nn.Module):
 
 
 # ============================================================
+# Supervised (hybrid) loss helpers
+# ============================================================
+
+
+def _move_supervised_batch(batch, device, dtype):
+    """Copy a supervised minibatch dict onto device/dtype."""
+    out = {}
+    for key, val in batch.items():
+        if isinstance(val, torch.Tensor):
+            out[key] = val.to(device=device, dtype=dtype)
+        else:
+            out[key] = val
+    return out
+
+
+def sample_supervised_batch(supervised_data, N_data, device, dtype):
+    """Draw a random minibatch from a precomputed QMC label dataset."""
+    n_total = int(supervised_data["u_target"].shape[0])
+    if n_total <= 0:
+        raise ValueError("supervised_data is empty")
+    n = min(int(N_data), n_total)
+    idx = torch.randint(0, n_total, (n,), device=supervised_data["u_target"].device)
+    batch = {k: v[idx] for k, v in supervised_data.items() if isinstance(v, torch.Tensor)}
+    return _move_supervised_batch(batch, device, dtype)
+
+
+def supervised_price_loss(
+    pinn,
+    batch,
+    sigma_mode="spot_var",
+    stationary=True,
+):
+    """
+    Weighted MSE between PINN normalized price and QMC+ADD labels.
+
+    ``batch`` must contain tensors: x, X, tau, r, xi0, omega, kappa, rho,
+    u_target, and optional weight.
+    """
+    x = batch["x"]
+    X = batch["X"]
+    tau = batch["tau"]
+    r = batch["r"]
+    xi0 = batch["xi0"]
+    omega = batch["omega"]
+    kappa = batch["kappa"]
+    rho = batch["rho"]
+    u_target = batch["u_target"]
+    weight = batch.get("weight")
+    if weight is None:
+        weight = torch.ones_like(u_target)
+
+    u_pred, u_bs, _ = _total_price(
+        pinn, x, X, tau, r, xi0, omega, kappa, rho, sigma_mode, stationary
+    )
+    # Relative to BS scale so deep ITM does not dominate the fit.
+    denom = 1.0 + torch.abs(u_bs.detach())
+    err = (u_pred - u_target) / denom
+    return torch.mean(weight * err**2)
+
+
+# ============================================================
 # Training
 # ============================================================
 
@@ -668,15 +729,31 @@ def train_network(
     stationary=True,
     lambda_boundary=1.0,
     lambda_terminal=1.0,
+    lambda_data=0.0,
+    supervised_data=None,
+    N_data=256,
+    detach_source=False,
     grad_clip=1.0,
     print_every=100,
     best_model_path="best_pinn_bergomi_xspace.pt",
     save_model=True,
     weight_decay=1e-2,
     cosine_eta_min=1e-5,
+    cosine_T0=3000,
     detect_anomaly=False,
+    extra_checkpoint_meta=None,
 ):
     device = next(pinn.parameters()).device
+    dtype = next(pinn.parameters()).dtype
+
+    use_data = (
+        supervised_data is not None
+        and float(lambda_data) > 0.0
+        and int(N_data) > 0
+    )
+    if supervised_data is not None:
+        # Keep the full dataset on the model device for fast indexing.
+        supervised_data = _move_supervised_batch(supervised_data, device, dtype)
 
     optimizer = torch.optim.AdamW(
         pinn.parameters(),
@@ -685,7 +762,7 @@ def train_network(
     )
     scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
         optimizer,
-        T_0=3000,
+        T_0=int(cosine_T0),
         eta_min=cosine_eta_min,
     )
 
@@ -696,11 +773,17 @@ def train_network(
         "physics": [],
         "terminal": [],
         "boundary": [],
+        "data": [],
         "lr": [],
         "model depth": pinn.depth,
         "model width": pinn.hidden,
         "sigma_mode": sigma_mode,
         "stationary": stationary,
+        "lambda_data": float(lambda_data),
+        "N_data": int(N_data) if use_data else 0,
+        "n_supervised": (
+            int(supervised_data["u_target"].shape[0]) if use_data else 0
+        ),
     }
 
     best_loss = float("inf")
@@ -719,6 +802,7 @@ def train_network(
             N_points=N_pde,
             sigma_mode=sigma_mode,
             stationary=stationary,
+            detach_source=detach_source,
         )
         loss_terminal = spot_terminal_condition_x(
             pinn=pinn,
@@ -737,10 +821,24 @@ def train_network(
             lambda_delta_high=0.1,
         )
 
+        if use_data:
+            batch = sample_supervised_batch(
+                supervised_data, N_data=N_data, device=device, dtype=dtype
+            )
+            loss_data = supervised_price_loss(
+                pinn,
+                batch,
+                sigma_mode=sigma_mode,
+                stationary=stationary,
+            )
+        else:
+            loss_data = torch.zeros((), device=device, dtype=dtype)
+
         loss = (
             loss_physics
             + lambda_terminal * loss_terminal
             + lambda_boundary * loss_boundary
+            + float(lambda_data) * loss_data
         )
 
         if not torch.isfinite(loss):
@@ -748,7 +846,8 @@ def train_network(
                 f"Non-finite total loss at epoch {epoch}: "
                 f"physics={loss_physics.item()}, "
                 f"terminal={loss_terminal.item()}, "
-                f"boundary={loss_boundary.item()}"
+                f"boundary={loss_boundary.item()}, "
+                f"data={float(loss_data.item())}"
             )
 
         loss.backward()
@@ -775,6 +874,7 @@ def train_network(
         elapsed = time.time() - start_time
         current_lr = optimizer.param_groups[0]["lr"]
         current_loss = loss.item()
+        data_val = float(loss_data.item())
 
         history["epoch"].append(epoch)
         history["elapsed_time"].append(elapsed)
@@ -782,6 +882,7 @@ def train_network(
         history["physics"].append(loss_physics.item())
         history["terminal"].append(loss_terminal.item())
         history["boundary"].append(loss_boundary.item())
+        history["data"].append(data_val)
         history["lr"].append(current_lr)
 
         if current_loss < best_loss:
@@ -790,30 +891,32 @@ def train_network(
             best_state_dict = copy.deepcopy(pinn.state_dict())
 
             if save_model:
-                torch.save(
-                    {
-                        "epoch": epoch,
-                        "model_state_dict": best_state_dict,
-                        "optimizer_state_dict": optimizer.state_dict(),
-                        "loss": best_loss,
-                        "sigma_mode": sigma_mode,
-                        "stationary": stationary,
-                        "call_put": getattr(pinn, "call_put", None),
-                        "x_min": getattr(pinn, "x_min", None),
-                        "x_max": getattr(pinn, "x_max", None),
-                        "X_max": getattr(pinn, "X_max", None),
-                        "T": getattr(pinn, "T", None),
-                        "r_max": getattr(pinn, "r_max", None),
-                        "xi0_max": getattr(pinn, "xi0_max", None),
-                        "omega_max": getattr(pinn, "omega_max", None),
-                        "kappa_max": getattr(pinn, "kappa_max", None),
-                        "v_max": getattr(pinn, "v_max", None),
-                        "kappa_floor": getattr(pinn, "kappa_floor", None),
-                        "hidden": pinn.hidden,
-                        "depth": pinn.depth,
-                    },
-                    best_model_path,
-                )
+                ckpt = {
+                    "epoch": epoch,
+                    "model_state_dict": best_state_dict,
+                    "optimizer_state_dict": optimizer.state_dict(),
+                    "loss": best_loss,
+                    "sigma_mode": sigma_mode,
+                    "stationary": stationary,
+                    "call_put": getattr(pinn, "call_put", None),
+                    "x_min": getattr(pinn, "x_min", None),
+                    "x_max": getattr(pinn, "x_max", None),
+                    "X_max": getattr(pinn, "X_max", None),
+                    "T": getattr(pinn, "T", None),
+                    "r_max": getattr(pinn, "r_max", None),
+                    "xi0_max": getattr(pinn, "xi0_max", None),
+                    "omega_max": getattr(pinn, "omega_max", None),
+                    "kappa_max": getattr(pinn, "kappa_max", None),
+                    "v_max": getattr(pinn, "v_max", None),
+                    "kappa_floor": getattr(pinn, "kappa_floor", None),
+                    "hidden": pinn.hidden,
+                    "depth": pinn.depth,
+                    "lambda_data": float(lambda_data),
+                    "hybrid_supervised": bool(use_data),
+                }
+                if extra_checkpoint_meta:
+                    ckpt.update(extra_checkpoint_meta)
+                torch.save(ckpt, best_model_path)
 
         if epoch % print_every == 0 or epoch == 1:
             grad_norm_str = (
@@ -827,6 +930,7 @@ def train_network(
                 f"PDE_x: {loss_physics.item():.6e} | "
                 f"Terminal_x: {loss_terminal.item():.6e} | "
                 f"Boundary_x: {loss_boundary.item():.6e} | "
+                f"Data: {data_val:.6e} | "
                 f"GradNorm: {grad_norm_str} | "
                 f"Best: {best_loss:.6e} @ {best_epoch}"
             )

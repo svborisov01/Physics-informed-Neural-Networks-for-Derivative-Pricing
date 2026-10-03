@@ -671,12 +671,22 @@ def _move_supervised_batch(batch, device, dtype):
 
 def sample_supervised_batch(supervised_data, N_data, device, dtype):
     """Draw a random minibatch from a precomputed QMC label dataset."""
-    n_total = int(supervised_data["u_target"].shape[0])
+    if "u_target" in supervised_data:
+        anchor = supervised_data["u_target"]
+    elif "delta_target" in supervised_data:
+        anchor = supervised_data["delta_target"]
+    else:
+        raise ValueError(
+            "supervised_data must contain 'u_target' or 'delta_target'"
+        )
+    n_total = int(anchor.shape[0])
     if n_total <= 0:
         raise ValueError("supervised_data is empty")
     n = min(int(N_data), n_total)
-    idx = torch.randint(0, n_total, (n,), device=supervised_data["u_target"].device)
-    batch = {k: v[idx] for k, v in supervised_data.items() if isinstance(v, torch.Tensor)}
+    idx = torch.randint(0, n_total, (n,), device=anchor.device)
+    batch = {
+        k: v[idx] for k, v in supervised_data.items() if isinstance(v, torch.Tensor)
+    }
     return _move_supervised_batch(batch, device, dtype)
 
 
@@ -719,6 +729,109 @@ def supervised_price_loss(
     return torch.mean(weight * err**2)
 
 
+def supervised_price_l1(
+    pinn,
+    batch,
+    sigma_mode="spot_var",
+    stationary=True,
+):
+    """Mean absolute normalized-price error on a labeled batch (no grad)."""
+    x = batch["x"]
+    X = batch["X"]
+    tau = batch["tau"]
+    r = batch["r"]
+    xi0 = batch["xi0"]
+    omega = batch["omega"]
+    kappa = batch["kappa"]
+    rho = batch["rho"]
+    u_target = batch["u_target"]
+    u_pred, _, _ = _total_price(
+        pinn, x, X, tau, r, xi0, omega, kappa, rho, sigma_mode, stationary
+    )
+    return torch.mean(torch.abs(u_pred - u_target))
+
+
+def supervised_delta_loss(
+    pinn,
+    batch,
+    sigma_mode="spot_var",
+    stationary=True,
+):
+    """
+    MSE on pathwise Delta labels.
+
+    ``batch`` needs the usual market features plus ``delta_target``.
+    Delta = ∂V/∂S with V = K·u and x = log(S/K) ⇒ Δ = e^{-x} u_x.
+    """
+    x = batch["x"].detach().requires_grad_(True)
+    X = batch["X"]
+    tau = batch["tau"]
+    r = batch["r"]
+    xi0 = batch["xi0"]
+    omega = batch["omega"]
+    kappa = batch["kappa"]
+    rho = batch["rho"]
+    delta_target = batch["delta_target"]
+    weight = batch.get("weight")
+    if weight is None:
+        weight = torch.ones_like(delta_target)
+
+    u_pred, _, _ = _total_price(
+        pinn, x, X, tau, r, xi0, omega, kappa, rho, sigma_mode, stationary
+    )
+    u_x = torch.autograd.grad(u_pred.sum(), x, create_graph=True)[0]
+    delta_pred = torch.exp(-x) * u_x
+    err = delta_pred - delta_target
+    return torch.mean(weight * err**2)
+
+
+def otm_positivity_loss(
+    pinn,
+    N_points=2000,
+    sigma_mode="spot_var",
+    stationary=True,
+    otm_fraction=0.7,
+):
+    """
+    Soft hinge that penalizes negative normalized call prices.
+
+    Oversamples deep OTM log-moneyness so the wing that produced extra
+    negatives under hybrid fine-tuning is directly regularized.
+    """
+    device = next(pinn.parameters()).device
+    dtype = next(pinn.parameters()).dtype
+    n_otm = int(round(float(otm_fraction) * N_points))
+    n_rest = N_points - n_otm
+
+    x_rest, X, tau, r, xi0, omega, kappa, rho = _sample_interior(pinn, n_rest)
+    # Deep OTM for calls: x in [x_min, ~-0.25]
+    x_hi = min(float(pinn.x_max), -0.25)
+    x_lo = float(pinn.x_min)
+    x_otm = (
+        x_lo + (x_hi - x_lo) * torch.rand(n_otm, 1, device=device, dtype=dtype)
+    ).requires_grad_(True)
+
+    # Reuse factor/param draws from the rest sample by resampling interior for OTM
+    # size (keeps X~stationary OU coupling intact).
+    x_fill, X_otm, tau_otm, r_otm, xi0_otm, omega_otm, kappa_otm, rho_otm = (
+        _sample_interior(pinn, n_otm)
+    )
+    _ = x_fill
+    x = torch.cat([x_rest, x_otm], dim=0)
+    X = torch.cat([X, X_otm], dim=0)
+    tau = torch.cat([tau, tau_otm], dim=0)
+    r = torch.cat([r, r_otm], dim=0)
+    xi0 = torch.cat([xi0, xi0_otm], dim=0)
+    omega = torch.cat([omega, omega_otm], dim=0)
+    kappa = torch.cat([kappa, kappa_otm], dim=0)
+    rho = torch.cat([rho, rho_otm], dim=0)
+
+    u, _, _ = _total_price(
+        pinn, x, X, tau, r, xi0, omega, kappa, rho, sigma_mode, stationary
+    )
+    return torch.mean(torch.nn.functional.relu(-u) ** 2)
+
+
 # ============================================================
 # Training
 # ============================================================
@@ -735,8 +848,14 @@ def train_network(
     lambda_boundary=1.0,
     lambda_terminal=1.0,
     lambda_data=0.0,
+    lambda_delta=0.0,
+    lambda_otm=0.0,
     supervised_data=None,
+    supervised_delta_data=None,
+    val_data=None,
     N_data=256,
+    N_delta=64,
+    N_otm=2000,
     detach_source=False,
     grad_clip=1.0,
     print_every=100,
@@ -747,7 +866,17 @@ def train_network(
     cosine_T0=3000,
     detect_anomaly=False,
     extra_checkpoint_meta=None,
+    selection_metric="auto",
+    early_stop_patience=None,
 ):
+    """
+    Train Bergomi PINN.
+
+    ``selection_metric``:
+      - ``"auto"``: val L1 if ``val_data`` given, else full data loss if
+        supervised, else total loss
+      - ``"val_l1"`` / ``"data"`` / ``"total"``
+    """
     device = next(pinn.parameters()).device
     dtype = next(pinn.parameters()).dtype
 
@@ -756,9 +885,30 @@ def train_network(
         and float(lambda_data) > 0.0
         and int(N_data) > 0
     )
+    use_delta = (
+        supervised_delta_data is not None
+        and float(lambda_delta) > 0.0
+        and int(N_delta) > 0
+    )
+    use_otm = float(lambda_otm) > 0.0 and int(N_otm) > 0
+    use_val = val_data is not None
+
     if supervised_data is not None:
-        # Keep the full dataset on the model device for fast indexing.
         supervised_data = _move_supervised_batch(supervised_data, device, dtype)
+    if supervised_delta_data is not None:
+        supervised_delta_data = _move_supervised_batch(
+            supervised_delta_data, device, dtype
+        )
+    if val_data is not None:
+        val_data = _move_supervised_batch(val_data, device, dtype)
+
+    if selection_metric == "auto":
+        if use_val:
+            selection_metric = "val_l1"
+        elif use_data:
+            selection_metric = "data"
+        else:
+            selection_metric = "total"
 
     optimizer = torch.optim.AdamW(
         pinn.parameters(),
@@ -779,33 +929,47 @@ def train_network(
         "terminal": [],
         "boundary": [],
         "data": [],
+        "delta": [],
+        "otm": [],
+        "val_l1": [],
         "lr": [],
         "model depth": pinn.depth,
         "model width": pinn.hidden,
         "sigma_mode": sigma_mode,
         "stationary": stationary,
         "lambda_data": float(lambda_data),
+        "lambda_delta": float(lambda_delta),
+        "lambda_otm": float(lambda_otm),
+        "selection_metric": selection_metric,
         "N_data": int(N_data) if use_data else 0,
+        "N_delta": int(N_delta) if use_delta else 0,
         "n_supervised": (
             int(supervised_data["u_target"].shape[0]) if use_data else 0
         ),
+        "n_delta": (
+            int(supervised_delta_data["delta_target"].shape[0])
+            if use_delta
+            else 0
+        ),
+        "n_val": int(val_data["u_target"].shape[0]) if use_val else 0,
     }
 
     best_loss = float("inf")
     best_epoch = None
     best_state_dict = None
     best_data_loss = float("inf")
+    best_val_l1 = float("inf")
+    best_metric = float("inf")
+    epochs_since_improve = 0
     start_time = time.time()
 
     torch.autograd.set_detect_anomaly(detect_anomaly)
 
     def _full_data_loss():
-        """Evaluate supervised loss on the entire labeled set (no grad)."""
         if not use_data:
             return float("inf")
         pinn.eval()
         with torch.no_grad():
-            # _total_price uses autograd-free forward through the net.
             loss_val = supervised_price_loss(
                 pinn,
                 supervised_data,
@@ -814,6 +978,20 @@ def train_network(
             )
         pinn.train()
         return float(loss_val.item())
+
+    def _val_l1():
+        if not use_val:
+            return float("inf")
+        pinn.eval()
+        with torch.no_grad():
+            l1 = supervised_price_l1(
+                pinn,
+                val_data,
+                sigma_mode=sigma_mode,
+                stationary=stationary,
+            )
+        pinn.train()
+        return float(l1.item())
 
     for epoch in range(1, epochs + 1):
         pinn.train()
@@ -838,7 +1016,7 @@ def train_network(
             sigma_mode=sigma_mode,
             stationary=stationary,
             lambda_price_low=1.0,
-            lambda_delta_low=0.0,
+            lambda_delta_low=0.05 if use_otm else 0.0,
             lambda_price_high=1.0,
             lambda_delta_high=0.1,
         )
@@ -856,11 +1034,39 @@ def train_network(
         else:
             loss_data = torch.zeros((), device=device, dtype=dtype)
 
+        if use_delta:
+            dbatch = sample_supervised_batch(
+                supervised_delta_data,
+                N_data=N_delta,
+                device=device,
+                dtype=dtype,
+            )
+            loss_delta = supervised_delta_loss(
+                pinn,
+                dbatch,
+                sigma_mode=sigma_mode,
+                stationary=stationary,
+            )
+        else:
+            loss_delta = torch.zeros((), device=device, dtype=dtype)
+
+        if use_otm:
+            loss_otm = otm_positivity_loss(
+                pinn,
+                N_points=N_otm,
+                sigma_mode=sigma_mode,
+                stationary=stationary,
+            )
+        else:
+            loss_otm = torch.zeros((), device=device, dtype=dtype)
+
         loss = (
             loss_physics
             + lambda_terminal * loss_terminal
             + lambda_boundary * loss_boundary
             + float(lambda_data) * loss_data
+            + float(lambda_delta) * loss_delta
+            + float(lambda_otm) * loss_otm
         )
 
         if not torch.isfinite(loss):
@@ -869,7 +1075,9 @@ def train_network(
                 f"physics={loss_physics.item()}, "
                 f"terminal={loss_terminal.item()}, "
                 f"boundary={loss_boundary.item()}, "
-                f"data={float(loss_data.item())}"
+                f"data={float(loss_data.item())}, "
+                f"delta={float(loss_delta.item())}, "
+                f"otm={float(loss_otm.item())}"
             )
 
         loss.backward()
@@ -897,6 +1105,8 @@ def train_network(
         current_lr = optimizer.param_groups[0]["lr"]
         current_loss = loss.item()
         data_val = float(loss_data.item())
+        delta_val = float(loss_delta.item())
+        otm_val = float(loss_otm.item())
 
         history["epoch"].append(epoch)
         history["elapsed_time"].append(elapsed)
@@ -905,27 +1115,71 @@ def train_network(
         history["terminal"].append(loss_terminal.item())
         history["boundary"].append(loss_boundary.item())
         history["data"].append(data_val)
+        history["delta"].append(delta_val)
+        history["otm"].append(otm_val)
         history["lr"].append(current_lr)
 
-        # Prefer full-set data fit when hybrid labels are present; otherwise
-        # fall back to total training loss (PDE-only regime).
         improved = False
-        if use_data and (epoch == 1 or epoch % print_every == 0 or epoch == epochs):
-            full_data = _full_data_loss()
-            history.setdefault("data_full", []).append(
-                {"epoch": epoch, "data_full": full_data}
-            )
-            if full_data < best_data_loss:
-                best_data_loss = full_data
+        do_eval = (
+            epoch == 1
+            or epoch % print_every == 0
+            or epoch == epochs
+            or selection_metric == "total"
+        )
+        metric_now = None
+        val_l1_now = None
+        full_data = None
+
+        if do_eval or selection_metric in ("val_l1", "data"):
+            if use_val and (
+                selection_metric == "val_l1"
+                or epoch == 1
+                or epoch % print_every == 0
+                or epoch == epochs
+            ):
+                val_l1_now = _val_l1()
+                history["val_l1"].append({"epoch": epoch, "val_l1": val_l1_now})
+            if use_data and (
+                selection_metric == "data"
+                or epoch == 1
+                or epoch % print_every == 0
+                or epoch == epochs
+            ):
+                full_data = _full_data_loss()
+                history.setdefault("data_full", []).append(
+                    {"epoch": epoch, "data_full": full_data}
+                )
+
+            if selection_metric == "val_l1":
+                metric_now = val_l1_now
+            elif selection_metric == "data":
+                metric_now = full_data
+            else:
+                metric_now = current_loss
+
+            if metric_now is not None and metric_now < best_metric:
+                best_metric = metric_now
                 best_loss = current_loss
                 best_epoch = epoch
                 best_state_dict = copy.deepcopy(pinn.state_dict())
+                if full_data is not None:
+                    best_data_loss = full_data
+                if val_l1_now is not None:
+                    best_val_l1 = val_l1_now
                 improved = True
-        elif (not use_data) and current_loss < best_loss:
+                epochs_since_improve = 0
+            elif selection_metric != "total" and (
+                epoch == 1 or epoch % print_every == 0 or epoch == epochs
+            ):
+                epochs_since_improve += 1
+
+        if selection_metric == "total" and current_loss < best_metric:
+            best_metric = current_loss
             best_loss = current_loss
             best_epoch = epoch
             best_state_dict = copy.deepcopy(pinn.state_dict())
             improved = True
+            epochs_since_improve = 0
 
         if improved and save_model:
             ckpt = {
@@ -936,6 +1190,9 @@ def train_network(
                 "data_full_loss": (
                     best_data_loss if use_data else None
                 ),
+                "val_l1": best_val_l1 if use_val else None,
+                "selection_metric": selection_metric,
+                "best_metric": best_metric,
                 "sigma_mode": sigma_mode,
                 "stationary": stationary,
                 "call_put": getattr(pinn, "call_put", None),
@@ -952,7 +1209,9 @@ def train_network(
                 "hidden": pinn.hidden,
                 "depth": pinn.depth,
                 "lambda_data": float(lambda_data),
-                "hybrid_supervised": bool(use_data),
+                "lambda_delta": float(lambda_delta),
+                "lambda_otm": float(lambda_otm),
+                "hybrid_supervised": bool(use_data or use_delta),
             }
             if extra_checkpoint_meta:
                 ckpt.update(extra_checkpoint_meta)
@@ -962,10 +1221,16 @@ def train_network(
             grad_norm_str = (
                 f"{float(grad_norm):.3e}" if grad_norm is not None else "None"
             )
-            best_str = (
-                f"BestData: {best_data_loss:.6e} @ {best_epoch}"
-                if use_data
-                else f"Best: {best_loss:.6e} @ {best_epoch}"
+            if selection_metric == "val_l1":
+                best_str = f"BestValL1: {best_val_l1:.6e} @ {best_epoch}"
+            elif selection_metric == "data":
+                best_str = f"BestData: {best_data_loss:.6e} @ {best_epoch}"
+            else:
+                best_str = f"Best: {best_loss:.6e} @ {best_epoch}"
+            val_str = (
+                f"ValL1: {val_l1_now:.6e} | "
+                if val_l1_now is not None
+                else ""
             )
             print(
                 f"Epoch {epoch:6d} | "
@@ -976,13 +1241,31 @@ def train_network(
                 f"Terminal_x: {loss_terminal.item():.6e} | "
                 f"Boundary_x: {loss_boundary.item():.6e} | "
                 f"Data: {data_val:.6e} | "
+                f"Delta: {delta_val:.6e} | "
+                f"OTM: {otm_val:.6e} | "
+                f"{val_str}"
                 f"GradNorm: {grad_norm_str} | "
                 f"{best_str}"
             )
 
+        if (
+            early_stop_patience is not None
+            and selection_metric != "total"
+            and epochs_since_improve >= int(early_stop_patience)
+        ):
+            print(
+                f"Early stop at epoch {epoch}: no {selection_metric} "
+                f"improvement for {early_stop_patience} evals "
+                f"(best @ {best_epoch})",
+                flush=True,
+            )
+            break
+
     history["best_loss"] = best_loss
     history["best_epoch"] = best_epoch
     history["best_data_loss"] = best_data_loss if use_data else None
+    history["best_val_l1"] = best_val_l1 if use_val else None
+    history["best_metric"] = best_metric
 
     if best_state_dict is not None:
         pinn.load_state_dict(best_state_dict)

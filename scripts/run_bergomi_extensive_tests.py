@@ -4,8 +4,14 @@
 from __future__ import annotations
 
 import argparse
+import sys
 import shutil
 from pathlib import Path
+
+# Allow `python scripts/...` from repo root without installing the package
+_ROOT = Path(__file__).resolve().parents[1]
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
 
 from support_tools.bergomi_test_suite import run_extensive_bergomi_tests
 

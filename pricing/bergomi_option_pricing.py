@@ -234,8 +234,11 @@ def _soft_positive_price(u, beta: float = 40.0):
 
     softplus_beta(u) ≈ u for moderate/large positive u, and floors small
     negatives that the correction head can otherwise produce OTM.
+    beta <= 0 disables the transform (legacy checkpoints).
     """
-    return torch.nn.functional.softplus(u, beta=beta)
+    if beta is None or float(beta) <= 0.0:
+        return u
+    return torch.nn.functional.softplus(u, beta=float(beta))
 
 
 def _total_price(pinn, x, X, tau, r, xi0, omega, kappa, rho, sigma_mode, stationary):
@@ -465,6 +468,7 @@ class PINN(nn.Module):
         price_softplus_beta=40.0,
         corr_scale0=0.35,
         omega_gate_power=0.5,
+        corr_activation="softsign",
     ):
         super().__init__()
 
@@ -483,6 +487,12 @@ class PINN(nn.Module):
         self.price_softplus_beta = float(price_softplus_beta)
         self.corr_scale0 = float(corr_scale0)
         self.omega_gate_power = float(omega_gate_power)
+        act = str(corr_activation).lower().strip()
+        if act not in ("softsign", "tanh"):
+            raise ValueError(
+                f"corr_activation must be 'softsign' or 'tanh', got {corr_activation!r}"
+            )
+        self.corr_activation = act
         self.call_put = call_put
         self.depth = depth
         self.hidden = hidden
@@ -569,12 +579,18 @@ class PINN(nn.Module):
         raw = self.net(features)
         # Freer correction head: larger scale, sqrt(omega) gate (still U->0 as
         # omega->0), softsign instead of tanh so ATM Delta can move further.
+        # Legacy checkpoints use tanh + linear omega gate + scale0=0.15.
         w = (omega / max(self.omega_max, 1e-6)).clamp(0.0, 1.0)
         power = float(getattr(self, "omega_gate_power", 0.5))
         omega_gate = torch.pow(w, power)
         scale0 = float(getattr(self, "corr_scale0", 0.35))
         corr_scale = scale0 * (0.5 + tau / self.T) * (1.0 + 0.25 * torch.abs(x))
-        return omega_gate * corr_scale * torch.nn.functional.softsign(raw)
+        act = getattr(self, "corr_activation", "softsign")
+        if act == "tanh":
+            gated = torch.tanh(raw)
+        else:
+            gated = torch.nn.functional.softsign(raw)
+        return omega_gate * corr_scale * gated
 
     def forward(self, S, K, X, tau, r, xi0, omega, kappa, rho):
         eps = 1e-8
@@ -849,6 +865,9 @@ def train_network(
                         "corr_scale0": getattr(pinn, "corr_scale0", 0.35),
                         "omega_gate_power": getattr(
                             pinn, "omega_gate_power", 0.5
+                        ),
+                        "corr_activation": getattr(
+                            pinn, "corr_activation", "softsign"
                         ),
                         "hidden": pinn.hidden,
                         "depth": pinn.depth,

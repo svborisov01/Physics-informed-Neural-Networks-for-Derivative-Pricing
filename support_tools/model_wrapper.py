@@ -145,9 +145,23 @@ def _build_pinn(model_type: ModelType, ckpt: dict, hidden: int, depth: int) -> n
             depth=depth,
             v_max=ckpt.get("v_max", 1.0),
             kappa_floor=ckpt.get("kappa_floor", 0.25),
-            price_softplus_beta=ckpt.get("price_softplus_beta", 40.0),
-            corr_scale0=ckpt.get("corr_scale0", 0.35),
-            omega_gate_power=ckpt.get("omega_gate_power", 0.5),
+            # Pre-improvement checkpoints omit these keys and were trained with
+            # tanh / scale0=0.15 / linear omega gate / no softplus.
+            **(
+                dict(
+                    price_softplus_beta=ckpt["price_softplus_beta"],
+                    corr_scale0=ckpt["corr_scale0"],
+                    omega_gate_power=ckpt.get("omega_gate_power", 0.5),
+                    corr_activation=ckpt.get("corr_activation", "softsign"),
+                )
+                if "corr_scale0" in ckpt
+                else dict(
+                    price_softplus_beta=0.0,
+                    corr_scale0=0.15,
+                    omega_gate_power=1.0,
+                    corr_activation="tanh",
+                )
+            ),
         )
 
     from pricing.heston_option_pricing import PINN

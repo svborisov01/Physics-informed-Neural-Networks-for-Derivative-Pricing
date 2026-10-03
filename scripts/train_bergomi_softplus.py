@@ -29,7 +29,7 @@ def main():
     p.add_argument(
         "--out-checkpoint", default="trained_models/bergomi_softplus.pt"
     )
-    p.add_argument("--softplus-beta", type=float, default=40.0)
+    p.add_argument("--softplus-beta", type=float, default=400.0)
     p.add_argument("--epochs", type=int, default=1000)
     p.add_argument("--lr", type=float, default=2e-5)
     p.add_argument("--weight-decay", type=float, default=1e-3)

@@ -1,0 +1,212 @@
+[
+  {
+    "smile": {
+      "name": "baseline",
+      "xi0": 0.04,
+      "omega": 1.0,
+      "kappa": 2.0,
+      "rho": -0.5,
+      "X": 0.0,
+      "r": 0.05,
+      "q": 0.0,
+      "stationary": true,
+      "sigma_mode": "spot_var"
+    },
+    "artifacts": {
+      "price_png": "artifacts/bergomi_extensive_tests/surfaces_3d/baseline/3d_price_baseline.png",
+      "price_html": "artifacts/bergomi_extensive_tests/surfaces_3d/baseline/3d_price_baseline.html",
+      "delta_png": "artifacts/bergomi_extensive_tests/surfaces_3d/baseline/3d_delta_baseline.png",
+      "delta_html": "artifacts/bergomi_extensive_tests/surfaces_3d/baseline/3d_delta_baseline.html",
+      "gamma_png": "artifacts/bergomi_extensive_tests/surfaces_3d/baseline/3d_gamma_baseline.png",
+      "gamma_html": "artifacts/bergomi_extensive_tests/surfaces_3d/baseline/3d_gamma_baseline.html",
+      "theta_png": "artifacts/bergomi_extensive_tests/surfaces_3d/baseline/3d_theta_baseline.png",
+      "theta_html": "artifacts/bergomi_extensive_tests/surfaces_3d/baseline/3d_theta_baseline.html",
+      "vega_png": "artifacts/bergomi_extensive_tests/surfaces_3d/baseline/3d_vega_baseline.png",
+      "vega_html": "artifacts/bergomi_extensive_tests/surfaces_3d/baseline/3d_vega_baseline.html",
+      "dual_X_png": "artifacts/bergomi_extensive_tests/surfaces_3d/baseline/3d_dual_X_baseline.png",
+      "dual_X_html": "artifacts/bergomi_extensive_tests/surfaces_3d/baseline/3d_dual_X_baseline.html",
+      "npz": "artifacts/bergomi_extensive_tests/surfaces_3d/baseline/surfaces_baseline.npz"
+    },
+    "error_3d": {
+      "abs_err_png": "artifacts/bergomi_extensive_tests/surfaces_3d/baseline/3d_abs_err_baseline.png",
+      "abs_err_html": "artifacts/bergomi_extensive_tests/surfaces_3d/baseline/3d_abs_err_baseline.html",
+      "rel_err_png": "artifacts/bergomi_extensive_tests/surfaces_3d/baseline/3d_rel_err_baseline.png",
+      "rel_err_html": "artifacts/bergomi_extensive_tests/surfaces_3d/baseline/3d_rel_err_baseline.html"
+    }
+  },
+  {
+    "smile": {
+      "name": "strong_vovol",
+      "xi0": 0.04,
+      "omega": 1.8,
+      "kappa": 2.0,
+      "rho": -0.5,
+      "X": 0.0,
+      "r": 0.05,
+      "q": 0.0,
+      "stationary": true,
+      "sigma_mode": "spot_var"
+    },
+    "artifacts": {
+      "price_png": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_vovol/3d_price_strong_vovol.png",
+      "price_html": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_vovol/3d_price_strong_vovol.html",
+      "delta_png": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_vovol/3d_delta_strong_vovol.png",
+      "delta_html": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_vovol/3d_delta_strong_vovol.html",
+      "gamma_png": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_vovol/3d_gamma_strong_vovol.png",
+      "gamma_html": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_vovol/3d_gamma_strong_vovol.html",
+      "theta_png": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_vovol/3d_theta_strong_vovol.png",
+      "theta_html": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_vovol/3d_theta_strong_vovol.html",
+      "vega_png": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_vovol/3d_vega_strong_vovol.png",
+      "vega_html": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_vovol/3d_vega_strong_vovol.html",
+      "dual_X_png": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_vovol/3d_dual_X_strong_vovol.png",
+      "dual_X_html": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_vovol/3d_dual_X_strong_vovol.html",
+      "npz": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_vovol/surfaces_strong_vovol.npz"
+    },
+    "error_3d": {
+      "abs_err_png": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_vovol/3d_abs_err_strong_vovol.png",
+      "abs_err_html": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_vovol/3d_abs_err_strong_vovol.html",
+      "rel_err_png": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_vovol/3d_rel_err_strong_vovol.png",
+      "rel_err_html": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_vovol/3d_rel_err_strong_vovol.html"
+    }
+  },
+  {
+    "smile": {
+      "name": "strong_neg_skew",
+      "xi0": 0.04,
+      "omega": 1.0,
+      "kappa": 2.0,
+      "rho": -0.85,
+      "X": 0.0,
+      "r": 0.05,
+      "q": 0.0,
+      "stationary": true,
+      "sigma_mode": "spot_var"
+    },
+    "artifacts": {
+      "price_png": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_neg_skew/3d_price_strong_neg_skew.png",
+      "price_html": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_neg_skew/3d_price_strong_neg_skew.html",
+      "delta_png": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_neg_skew/3d_delta_strong_neg_skew.png",
+      "delta_html": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_neg_skew/3d_delta_strong_neg_skew.html",
+      "gamma_png": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_neg_skew/3d_gamma_strong_neg_skew.png",
+      "gamma_html": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_neg_skew/3d_gamma_strong_neg_skew.html",
+      "theta_png": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_neg_skew/3d_theta_strong_neg_skew.png",
+      "theta_html": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_neg_skew/3d_theta_strong_neg_skew.html",
+      "vega_png": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_neg_skew/3d_vega_strong_neg_skew.png",
+      "vega_html": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_neg_skew/3d_vega_strong_neg_skew.html",
+      "dual_X_png": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_neg_skew/3d_dual_X_strong_neg_skew.png",
+      "dual_X_html": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_neg_skew/3d_dual_X_strong_neg_skew.html",
+      "npz": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_neg_skew/surfaces_strong_neg_skew.npz"
+    },
+    "error_3d": {
+      "abs_err_png": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_neg_skew/3d_abs_err_strong_neg_skew.png",
+      "abs_err_html": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_neg_skew/3d_abs_err_strong_neg_skew.html",
+      "rel_err_png": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_neg_skew/3d_rel_err_strong_neg_skew.png",
+      "rel_err_html": "artifacts/bergomi_extensive_tests/surfaces_3d/strong_neg_skew/3d_rel_err_strong_neg_skew.html"
+    }
+  },
+  {
+    "smile": {
+      "name": "mild_fast_mr",
+      "xi0": 0.04,
+      "omega": 0.5,
+      "kappa": 4.0,
+      "rho": -0.3,
+      "X": 0.0,
+      "r": 0.05,
+      "q": 0.0,
+      "stationary": true,
+      "sigma_mode": "spot_var"
+    },
+    "artifacts": {
+      "price_png": "artifacts/bergomi_extensive_tests/surfaces_3d/mild_fast_mr/3d_price_mild_fast_mr.png",
+      "price_html": "artifacts/bergomi_extensive_tests/surfaces_3d/mild_fast_mr/3d_price_mild_fast_mr.html",
+      "delta_png": "artifacts/bergomi_extensive_tests/surfaces_3d/mild_fast_mr/3d_delta_mild_fast_mr.png",
+      "delta_html": "artifacts/bergomi_extensive_tests/surfaces_3d/mild_fast_mr/3d_delta_mild_fast_mr.html",
+      "gamma_png": "artifacts/bergomi_extensive_tests/surfaces_3d/mild_fast_mr/3d_gamma_mild_fast_mr.png",
+      "gamma_html": "artifacts/bergomi_extensive_tests/surfaces_3d/mild_fast_mr/3d_gamma_mild_fast_mr.html",
+      "theta_png": "artifacts/bergomi_extensive_tests/surfaces_3d/mild_fast_mr/3d_theta_mild_fast_mr.png",
+      "theta_html": "artifacts/bergomi_extensive_tests/surfaces_3d/mild_fast_mr/3d_theta_mild_fast_mr.html",
+      "vega_png": "artifacts/bergomi_extensive_tests/surfaces_3d/mild_fast_mr/3d_vega_mild_fast_mr.png",
+      "vega_html": "artifacts/bergomi_extensive_tests/surfaces_3d/mild_fast_mr/3d_vega_mild_fast_mr.html",
+      "dual_X_png": "artifacts/bergomi_extensive_tests/surfaces_3d/mild_fast_mr/3d_dual_X_mild_fast_mr.png",
+      "dual_X_html": "artifacts/bergomi_extensive_tests/surfaces_3d/mild_fast_mr/3d_dual_X_mild_fast_mr.html",
+      "npz": "artifacts/bergomi_extensive_tests/surfaces_3d/mild_fast_mr/surfaces_mild_fast_mr.npz"
+    },
+    "error_3d": {
+      "abs_err_png": "artifacts/bergomi_extensive_tests/surfaces_3d/mild_fast_mr/3d_abs_err_mild_fast_mr.png",
+      "abs_err_html": "artifacts/bergomi_extensive_tests/surfaces_3d/mild_fast_mr/3d_abs_err_mild_fast_mr.html",
+      "rel_err_png": "artifacts/bergomi_extensive_tests/surfaces_3d/mild_fast_mr/3d_rel_err_mild_fast_mr.png",
+      "rel_err_html": "artifacts/bergomi_extensive_tests/surfaces_3d/mild_fast_mr/3d_rel_err_mild_fast_mr.html"
+    }
+  },
+  {
+    "smile": {
+      "name": "slow_mr",
+      "xi0": 0.04,
+      "omega": 1.2,
+      "kappa": 0.6,
+      "rho": -0.6,
+      "X": 0.0,
+      "r": 0.05,
+      "q": 0.0,
+      "stationary": true,
+      "sigma_mode": "spot_var"
+    },
+    "artifacts": {
+      "price_png": "artifacts/bergomi_extensive_tests/surfaces_3d/slow_mr/3d_price_slow_mr.png",
+      "price_html": "artifacts/bergomi_extensive_tests/surfaces_3d/slow_mr/3d_price_slow_mr.html",
+      "delta_png": "artifacts/bergomi_extensive_tests/surfaces_3d/slow_mr/3d_delta_slow_mr.png",
+      "delta_html": "artifacts/bergomi_extensive_tests/surfaces_3d/slow_mr/3d_delta_slow_mr.html",
+      "gamma_png": "artifacts/bergomi_extensive_tests/surfaces_3d/slow_mr/3d_gamma_slow_mr.png",
+      "gamma_html": "artifacts/bergomi_extensive_tests/surfaces_3d/slow_mr/3d_gamma_slow_mr.html",
+      "theta_png": "artifacts/bergomi_extensive_tests/surfaces_3d/slow_mr/3d_theta_slow_mr.png",
+      "theta_html": "artifacts/bergomi_extensive_tests/surfaces_3d/slow_mr/3d_theta_slow_mr.html",
+      "vega_png": "artifacts/bergomi_extensive_tests/surfaces_3d/slow_mr/3d_vega_slow_mr.png",
+      "vega_html": "artifacts/bergomi_extensive_tests/surfaces_3d/slow_mr/3d_vega_slow_mr.html",
+      "dual_X_png": "artifacts/bergomi_extensive_tests/surfaces_3d/slow_mr/3d_dual_X_slow_mr.png",
+      "dual_X_html": "artifacts/bergomi_extensive_tests/surfaces_3d/slow_mr/3d_dual_X_slow_mr.html",
+      "npz": "artifacts/bergomi_extensive_tests/surfaces_3d/slow_mr/surfaces_slow_mr.npz"
+    },
+    "error_3d": {
+      "abs_err_png": "artifacts/bergomi_extensive_tests/surfaces_3d/slow_mr/3d_abs_err_slow_mr.png",
+      "abs_err_html": "artifacts/bergomi_extensive_tests/surfaces_3d/slow_mr/3d_abs_err_slow_mr.html",
+      "rel_err_png": "artifacts/bergomi_extensive_tests/surfaces_3d/slow_mr/3d_rel_err_slow_mr.png",
+      "rel_err_html": "artifacts/bergomi_extensive_tests/surfaces_3d/slow_mr/3d_rel_err_slow_mr.html"
+    }
+  },
+  {
+    "smile": {
+      "name": "near_bs",
+      "xi0": 0.04,
+      "omega": 0.05,
+      "kappa": 2.0,
+      "rho": 0.0,
+      "X": 0.0,
+      "r": 0.05,
+      "q": 0.0,
+      "stationary": true,
+      "sigma_mode": "spot_var"
+    },
+    "artifacts": {
+      "price_png": "artifacts/bergomi_extensive_tests/surfaces_3d/near_bs/3d_price_near_bs.png",
+      "price_html": "artifacts/bergomi_extensive_tests/surfaces_3d/near_bs/3d_price_near_bs.html",
+      "delta_png": "artifacts/bergomi_extensive_tests/surfaces_3d/near_bs/3d_delta_near_bs.png",
+      "delta_html": "artifacts/bergomi_extensive_tests/surfaces_3d/near_bs/3d_delta_near_bs.html",
+      "gamma_png": "artifacts/bergomi_extensive_tests/surfaces_3d/near_bs/3d_gamma_near_bs.png",
+      "gamma_html": "artifacts/bergomi_extensive_tests/surfaces_3d/near_bs/3d_gamma_near_bs.html",
+      "theta_png": "artifacts/bergomi_extensive_tests/surfaces_3d/near_bs/3d_theta_near_bs.png",
+      "theta_html": "artifacts/bergomi_extensive_tests/surfaces_3d/near_bs/3d_theta_near_bs.html",
+      "vega_png": "artifacts/bergomi_extensive_tests/surfaces_3d/near_bs/3d_vega_near_bs.png",
+      "vega_html": "artifacts/bergomi_extensive_tests/surfaces_3d/near_bs/3d_vega_near_bs.html",
+      "dual_X_png": "artifacts/bergomi_extensive_tests/surfaces_3d/near_bs/3d_dual_X_near_bs.png",
+      "dual_X_html": "artifacts/bergomi_extensive_tests/surfaces_3d/near_bs/3d_dual_X_near_bs.html",
+      "npz": "artifacts/bergomi_extensive_tests/surfaces_3d/near_bs/surfaces_near_bs.npz"
+    },
+    "error_3d": {
+      "abs_err_png": "artifacts/bergomi_extensive_tests/surfaces_3d/near_bs/3d_abs_err_near_bs.png",
+      "abs_err_html": "artifacts/bergomi_extensive_tests/surfaces_3d/near_bs/3d_abs_err_near_bs.html",
+      "rel_err_png": "artifacts/bergomi_extensive_tests/surfaces_3d/near_bs/3d_rel_err_near_bs.png",
+      "rel_err_html": "artifacts/bergomi_extensive_tests/surfaces_3d/near_bs/3d_rel_err_near_bs.html"
+    }
+  }
+]

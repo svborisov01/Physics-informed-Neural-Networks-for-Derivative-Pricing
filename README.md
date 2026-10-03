@@ -106,6 +106,16 @@ All testing and visualization goes through `support_tools/model_wrapper.py`:
 
 Legacy functions `bs_2d_slice_test` and `heston_2d_slice_test` in `support_tools/testing_tools.py` delegate to `run_slice_test` for backward compatibility.
 
+### Bergomi extensive tests (QMC + ADD)
+
+```bash
+python scripts/run_bergomi_extensive_tests.py \
+  --checkpoint trained_models/bergomi.pt \
+  --n-paths-price 131072 --n-paths-greeks 131072 --n-steps 128
+```
+
+Uses scrambled Sobol QMC with antithetic differencing (ADD) for fine-grid price norms, smile-parameter heatmaps on \((\tau,S)\), and PINN vs QMC+ADD Greeks. See `artifacts/bergomi_extensive_tests/SUMMARY.md`.
+
 ## Pre-trained Checkpoints
 
 | File | Type | Architecture | Compatible |

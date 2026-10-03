@@ -1,0 +1,500 @@
+{
+  "checkpoint": "trained_models/bergomi.pt",
+  "meta": {
+    "model_type": "bergomi",
+    "sigma_mode": "spot_var",
+    "stationary": true,
+    "call_put": "Call",
+    "hidden": 128,
+    "depth": 4,
+    "epoch": 1149,
+    "loss": 0.0001322944153798744
+  },
+  "method": "scrambled Sobol QMC + antithetic differencing (ADD)",
+  "fine_grid": {
+    "smile": {
+      "name": "baseline",
+      "xi0": 0.04,
+      "omega": 1.0,
+      "kappa": 2.0,
+      "rho": -0.5,
+      "X": 0.0,
+      "r": 0.05,
+      "q": 0.0,
+      "stationary": true,
+      "sigma_mode": "spot_var"
+    },
+    "grid": {
+      "S": [
+        60.0,
+        160.0,
+        2.0,
+        51
+      ],
+      "tau": [
+        0.2,
+        1.6,
+        29
+      ],
+      "n_paths_qmc_add": 131072,
+      "n_steps": 128
+    },
+    "abs_norms": {
+      "L1": 0.10643542744520378,
+      "L2": 0.1347370528135583,
+      "Linf": 0.32067164774365864,
+      "MAE": 0.10643542744520378,
+      "RMSE": 0.1347370528135583
+    },
+    "rel_norms": {
+      "L1": 0.03023787463786936,
+      "L2": 0.056406902150437414,
+      "Linf": 0.2610931732735566,
+      "MAE": 0.03023787463786936,
+      "RMSE": 0.056406902150437414
+    },
+    "mean_mc_stderr": 0.01613357295743801,
+    "max_mc_stderr": 0.033914636357161465,
+    "artifacts": {
+      "abs_heatmap": "artifacts/bergomi_extensive_tests/fine_grid/fine_grid_baseline_abs_err.png",
+      "rel_heatmap": "artifacts/bergomi_extensive_tests/fine_grid/fine_grid_baseline_rel_err.png",
+      "npz": "artifacts/bergomi_extensive_tests/fine_grid/fine_grid_baseline.npz"
+    }
+  },
+  "smile_heatmaps": [
+    {
+      "smile": {
+        "name": "baseline",
+        "xi0": 0.04,
+        "omega": 1.0,
+        "kappa": 2.0,
+        "rho": -0.5,
+        "X": 0.0,
+        "r": 0.05,
+        "q": 0.0,
+        "stationary": true,
+        "sigma_mode": "spot_var"
+      },
+      "grid": {
+        "S": [
+          70.0,
+          140.0,
+          2.5,
+          29
+        ],
+        "tau": [
+          0.25,
+          1.5,
+          21
+        ],
+        "n_paths_qmc_add": 131072,
+        "n_steps": 128
+      },
+      "abs_norms": {
+        "L1": 0.1171126480071312,
+        "L2": 0.14388028808494438,
+        "Linf": 0.2965690727949357,
+        "MAE": 0.1171126480071312,
+        "RMSE": 0.14388028808494438
+      },
+      "rel_norms": {
+        "L1": 0.028052425190499254,
+        "L2": 0.048270713182462364,
+        "Linf": 0.14077457608524666,
+        "MAE": 0.028052425190499254,
+        "RMSE": 0.048270713182462364
+      },
+      "mean_mc_stderr": 0.016599907194511914,
+      "max_mc_stderr": 0.03079176743926636,
+      "artifacts": {
+        "abs_heatmap": "artifacts/bergomi_extensive_tests/smile_heatmaps/fine_grid_baseline_abs_err.png",
+        "rel_heatmap": "artifacts/bergomi_extensive_tests/smile_heatmaps/fine_grid_baseline_rel_err.png",
+        "npz": "artifacts/bergomi_extensive_tests/smile_heatmaps/fine_grid_baseline.npz",
+        "smile_heatmap": "artifacts/bergomi_extensive_tests/smile_heatmaps/heatmap_baseline.png"
+      }
+    },
+    {
+      "smile": {
+        "name": "strong_vovol",
+        "xi0": 0.04,
+        "omega": 1.8,
+        "kappa": 2.0,
+        "rho": -0.5,
+        "X": 0.0,
+        "r": 0.05,
+        "q": 0.0,
+        "stationary": true,
+        "sigma_mode": "spot_var"
+      },
+      "grid": {
+        "S": [
+          70.0,
+          140.0,
+          2.5,
+          29
+        ],
+        "tau": [
+          0.25,
+          1.5,
+          21
+        ],
+        "n_paths_qmc_add": 131072,
+        "n_steps": 128
+      },
+      "abs_norms": {
+        "L1": 0.1913798442013515,
+        "L2": 0.2261162338403959,
+        "Linf": 0.5072921542937792,
+        "MAE": 0.1913798442013515,
+        "RMSE": 0.2261162338403959
+      },
+      "rel_norms": {
+        "L1": 0.03973160807598547,
+        "L2": 0.06722435088424421,
+        "Linf": 0.2208328316999353,
+        "MAE": 0.03973160807598547,
+        "RMSE": 0.06722435088424421
+      },
+      "mean_mc_stderr": 0.017525857691162983,
+      "max_mc_stderr": 0.03898795521388147,
+      "artifacts": {
+        "abs_heatmap": "artifacts/bergomi_extensive_tests/smile_heatmaps/fine_grid_strong_vovol_abs_err.png",
+        "rel_heatmap": "artifacts/bergomi_extensive_tests/smile_heatmaps/fine_grid_strong_vovol_rel_err.png",
+        "npz": "artifacts/bergomi_extensive_tests/smile_heatmaps/fine_grid_strong_vovol.npz",
+        "smile_heatmap": "artifacts/bergomi_extensive_tests/smile_heatmaps/heatmap_strong_vovol.png"
+      }
+    },
+    {
+      "smile": {
+        "name": "strong_neg_skew",
+        "xi0": 0.04,
+        "omega": 1.0,
+        "kappa": 2.0,
+        "rho": -0.85,
+        "X": 0.0,
+        "r": 0.05,
+        "q": 0.0,
+        "stationary": true,
+        "sigma_mode": "spot_var"
+      },
+      "grid": {
+        "S": [
+          70.0,
+          140.0,
+          2.5,
+          29
+        ],
+        "tau": [
+          0.25,
+          1.5,
+          21
+        ],
+        "n_paths_qmc_add": 131072,
+        "n_steps": 128
+      },
+      "abs_norms": {
+        "L1": 0.22759931976653613,
+        "L2": 0.27781592652935894,
+        "Linf": 0.5865651874134112,
+        "MAE": 0.22759931976653613,
+        "RMSE": 0.27781592652935894
+      },
+      "rel_norms": {
+        "L1": 0.0643986626502363,
+        "L2": 0.11301899642456308,
+        "Linf": 0.31990149912173405,
+        "MAE": 0.0643986626502363,
+        "RMSE": 0.11301899642456308
+      },
+      "mean_mc_stderr": 0.012891971549388271,
+      "max_mc_stderr": 0.026025453049046424,
+      "artifacts": {
+        "abs_heatmap": "artifacts/bergomi_extensive_tests/smile_heatmaps/fine_grid_strong_neg_skew_abs_err.png",
+        "rel_heatmap": "artifacts/bergomi_extensive_tests/smile_heatmaps/fine_grid_strong_neg_skew_rel_err.png",
+        "npz": "artifacts/bergomi_extensive_tests/smile_heatmaps/fine_grid_strong_neg_skew.npz",
+        "smile_heatmap": "artifacts/bergomi_extensive_tests/smile_heatmaps/heatmap_strong_neg_skew.png"
+      }
+    },
+    {
+      "smile": {
+        "name": "mild_fast_mr",
+        "xi0": 0.04,
+        "omega": 0.5,
+        "kappa": 4.0,
+        "rho": -0.3,
+        "X": 0.0,
+        "r": 0.05,
+        "q": 0.0,
+        "stationary": true,
+        "sigma_mode": "spot_var"
+      },
+      "grid": {
+        "S": [
+          70.0,
+          140.0,
+          2.5,
+          29
+        ],
+        "tau": [
+          0.25,
+          1.5,
+          21
+        ],
+        "n_paths_qmc_add": 131072,
+        "n_steps": 128
+      },
+      "abs_norms": {
+        "L1": 0.05269095433783704,
+        "L2": 0.06353308757911595,
+        "Linf": 0.20532902784197304,
+        "MAE": 0.05269095433783704,
+        "RMSE": 0.06353308757911595
+      },
+      "rel_norms": {
+        "L1": 0.010317629566949489,
+        "L2": 0.0183202472696228,
+        "Linf": 0.05965315537771369,
+        "MAE": 0.010317629566949489,
+        "RMSE": 0.0183202472696228
+      },
+      "mean_mc_stderr": 0.01841890780458308,
+      "max_mc_stderr": 0.035613249261090045,
+      "artifacts": {
+        "abs_heatmap": "artifacts/bergomi_extensive_tests/smile_heatmaps/fine_grid_mild_fast_mr_abs_err.png",
+        "rel_heatmap": "artifacts/bergomi_extensive_tests/smile_heatmaps/fine_grid_mild_fast_mr_rel_err.png",
+        "npz": "artifacts/bergomi_extensive_tests/smile_heatmaps/fine_grid_mild_fast_mr.npz",
+        "smile_heatmap": "artifacts/bergomi_extensive_tests/smile_heatmaps/heatmap_mild_fast_mr.png"
+      }
+    },
+    {
+      "smile": {
+        "name": "slow_mr",
+        "xi0": 0.04,
+        "omega": 1.2,
+        "kappa": 0.6,
+        "rho": -0.6,
+        "X": 0.0,
+        "r": 0.05,
+        "q": 0.0,
+        "stationary": true,
+        "sigma_mode": "spot_var"
+      },
+      "grid": {
+        "S": [
+          70.0,
+          140.0,
+          2.5,
+          29
+        ],
+        "tau": [
+          0.25,
+          1.5,
+          21
+        ],
+        "n_paths_qmc_add": 131072,
+        "n_steps": 128
+      },
+      "abs_norms": {
+        "L1": 0.2867210094600547,
+        "L2": 0.36121003417033987,
+        "Linf": 0.9193108723727903,
+        "MAE": 0.2867210094600547,
+        "RMSE": 0.36121003417033987
+      },
+      "rel_norms": {
+        "L1": 0.04451667684789969,
+        "L2": 0.07050148598391628,
+        "Linf": 0.24034214784591532,
+        "MAE": 0.04451667684789969,
+        "RMSE": 0.07050148598391628
+      },
+      "mean_mc_stderr": 0.012836828274418868,
+      "max_mc_stderr": 0.02984682843421053,
+      "artifacts": {
+        "abs_heatmap": "artifacts/bergomi_extensive_tests/smile_heatmaps/fine_grid_slow_mr_abs_err.png",
+        "rel_heatmap": "artifacts/bergomi_extensive_tests/smile_heatmaps/fine_grid_slow_mr_rel_err.png",
+        "npz": "artifacts/bergomi_extensive_tests/smile_heatmaps/fine_grid_slow_mr.npz",
+        "smile_heatmap": "artifacts/bergomi_extensive_tests/smile_heatmaps/heatmap_slow_mr.png"
+      }
+    },
+    {
+      "smile": {
+        "name": "near_bs",
+        "xi0": 0.04,
+        "omega": 0.05,
+        "kappa": 2.0,
+        "rho": 0.0,
+        "X": 0.0,
+        "r": 0.05,
+        "q": 0.0,
+        "stationary": true,
+        "sigma_mode": "spot_var"
+      },
+      "grid": {
+        "S": [
+          70.0,
+          140.0,
+          2.5,
+          29
+        ],
+        "tau": [
+          0.25,
+          1.5,
+          21
+        ],
+        "n_paths_qmc_add": 131072,
+        "n_steps": 128
+      },
+      "abs_norms": {
+        "L1": 0.005349705644407357,
+        "L2": 0.006916203891601157,
+        "Linf": 0.02516907349096975,
+        "MAE": 0.005349705644407357,
+        "RMSE": 0.006916203891601157
+      },
+      "rel_norms": {
+        "L1": 0.0007313055873098893,
+        "L2": 0.0012196886446453458,
+        "Linf": 0.006034718387039068,
+        "MAE": 0.0007313055873098893,
+        "RMSE": 0.0012196886446453458
+      },
+      "mean_mc_stderr": 0.01901579947438219,
+      "max_mc_stderr": 0.03673323927041914,
+      "artifacts": {
+        "abs_heatmap": "artifacts/bergomi_extensive_tests/smile_heatmaps/fine_grid_near_bs_abs_err.png",
+        "rel_heatmap": "artifacts/bergomi_extensive_tests/smile_heatmaps/fine_grid_near_bs_rel_err.png",
+        "npz": "artifacts/bergomi_extensive_tests/smile_heatmaps/fine_grid_near_bs.npz",
+        "smile_heatmap": "artifacts/bergomi_extensive_tests/smile_heatmaps/heatmap_near_bs.png"
+      }
+    }
+  ],
+  "greeks": [
+    {
+      "smile": {
+        "name": "baseline",
+        "xi0": 0.04,
+        "omega": 1.0,
+        "kappa": 2.0,
+        "rho": -0.5,
+        "X": 0.0,
+        "r": 0.05,
+        "q": 0.0,
+        "stationary": true,
+        "sigma_mode": "spot_var"
+      },
+      "n_paths_qmc_add": 131072,
+      "n_steps": 160,
+      "price_norms": {
+        "L1": 0.11140475615725517,
+        "L2": 0.14167261093079697,
+        "Linf": 0.30237731195182915,
+        "MAE": 0.11140475615725517,
+        "RMSE": 0.14167261093079697
+      },
+      "delta_norms": {
+        "L1": 0.010814854258822379,
+        "L2": 0.013901724959813105,
+        "Linf": 0.02685190134446891,
+        "MAE": 0.010814854258822379,
+        "RMSE": 0.013901724959813105
+      },
+      "theta_norms": {
+        "L1": 0.2573343305567498,
+        "L2": 0.297943310860635,
+        "Linf": 0.5536086060451026,
+        "MAE": 0.2573343305567498,
+        "RMSE": 0.297943310860635
+      },
+      "artifacts": {
+        "delta_heatmap": "artifacts/bergomi_extensive_tests/greeks/greeks_delta_abs_err_baseline.png",
+        "theta_heatmap": "artifacts/bergomi_extensive_tests/greeks/greeks_theta_abs_err_baseline.png",
+        "npz": "artifacts/bergomi_extensive_tests/greeks/greeks_baseline.npz"
+      }
+    },
+    {
+      "smile": {
+        "name": "strong_vovol",
+        "xi0": 0.04,
+        "omega": 1.8,
+        "kappa": 2.0,
+        "rho": -0.5,
+        "X": 0.0,
+        "r": 0.05,
+        "q": 0.0,
+        "stationary": true,
+        "sigma_mode": "spot_var"
+      },
+      "n_paths_qmc_add": 131072,
+      "n_steps": 160,
+      "price_norms": {
+        "L1": 0.21706452122426306,
+        "L2": 0.25054239014757385,
+        "Linf": 0.48459168649642237,
+        "MAE": 0.21706452122426306,
+        "RMSE": 0.25054239014757385
+      },
+      "delta_norms": {
+        "L1": 0.01847898020727049,
+        "L2": 0.024895649121909544,
+        "Linf": 0.050406290968431564,
+        "MAE": 0.01847898020727049,
+        "RMSE": 0.024895649121909544
+      },
+      "theta_norms": {
+        "L1": 0.4146523011212476,
+        "L2": 0.5008340020333478,
+        "Linf": 0.9874138799585452,
+        "MAE": 0.4146523011212476,
+        "RMSE": 0.5008340020333478
+      },
+      "artifacts": {
+        "delta_heatmap": "artifacts/bergomi_extensive_tests/greeks/greeks_delta_abs_err_strong_vovol.png",
+        "theta_heatmap": "artifacts/bergomi_extensive_tests/greeks/greeks_theta_abs_err_strong_vovol.png",
+        "npz": "artifacts/bergomi_extensive_tests/greeks/greeks_strong_vovol.npz"
+      }
+    },
+    {
+      "smile": {
+        "name": "strong_neg_skew",
+        "xi0": 0.04,
+        "omega": 1.0,
+        "kappa": 2.0,
+        "rho": -0.85,
+        "X": 0.0,
+        "r": 0.05,
+        "q": 0.0,
+        "stationary": true,
+        "sigma_mode": "spot_var"
+      },
+      "n_paths_qmc_add": 131072,
+      "n_steps": 160,
+      "price_norms": {
+        "L1": 0.22239005001834639,
+        "L2": 0.2741812571530179,
+        "Linf": 0.5659063702433818,
+        "MAE": 0.22239005001834639,
+        "RMSE": 0.2741812571530179
+      },
+      "delta_norms": {
+        "L1": 0.019203851793225576,
+        "L2": 0.024080560793405516,
+        "Linf": 0.04516551572529308,
+        "MAE": 0.019203851793225576,
+        "RMSE": 0.024080560793405516
+      },
+      "theta_norms": {
+        "L1": 0.3203000232570153,
+        "L2": 0.37508891809933453,
+        "Linf": 0.8335161422242967,
+        "MAE": 0.3203000232570153,
+        "RMSE": 0.37508891809933453
+      },
+      "artifacts": {
+        "delta_heatmap": "artifacts/bergomi_extensive_tests/greeks/greeks_delta_abs_err_strong_neg_skew.png",
+        "theta_heatmap": "artifacts/bergomi_extensive_tests/greeks/greeks_theta_abs_err_strong_neg_skew.png",
+        "npz": "artifacts/bergomi_extensive_tests/greeks/greeks_strong_neg_skew.npz"
+      }
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "n_points": 324,
+  "K": 100.0,
+  "S_grid": [
+    70.0,
+    80.0,
+    90.0,
+    95.0,
+    100.0,
+    105.0,
+    110.0,
+    120.0,
+    140.0
+  ],
+  "tau_grid": [
+    0.25,
+    0.5,
+    0.75,
+    1.0,
+    1.25,
+    1.5
+  ],
+  "n_paths": 65536,
+  "n_steps": 96,
+  "seed": 123,
+  "smiles": [
+    "baseline",
+    "strong_vovol",
+    "strong_neg_skew",
+    "mild_fast_mr",
+    "slow_mr",
+    "near_bs"
+  ],
+  "u_target_mean": 0.13284271345934517,
+  "weight_mean": 0.7536556811649691
+}

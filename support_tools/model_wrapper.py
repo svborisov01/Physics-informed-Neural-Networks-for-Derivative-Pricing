@@ -145,6 +145,8 @@ def _build_pinn(model_type: ModelType, ckpt: dict, hidden: int, depth: int) -> n
             depth=depth,
             v_max=ckpt.get("v_max", 1.0),
             kappa_floor=ckpt.get("kappa_floor", 0.25),
+            # 0 disables softplus (legacy checkpoints); new runs set e.g. 40.
+            price_softplus_beta=ckpt.get("price_softplus_beta", 0.0),
         )
 
     from pricing.heston_option_pricing import PINN
@@ -660,7 +662,10 @@ def compute_greeks(
         u_bs = bs_option_normalized_from_x(
             x=x_t, tau=tau_t, r=r_t, sigma_bs=sigma_bs, call_put=pinn.call_put
         )
-        u = u_bs + U
+        from pricing.bergomi_option_pricing import _soft_positive_price
+
+        beta = float(getattr(pinn, "price_softplus_beta", 0.0))
+        u = _soft_positive_price(u_bs + U, beta=beta)
     else:
         raise ValueError(f"Unsupported model type: {model_type}")
 

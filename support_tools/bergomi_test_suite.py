@@ -461,7 +461,10 @@ def bergomi_price_greeks_grids(
     u_bs = bs_option_normalized_from_x(
         x=x_t, tau=tau_t, r=r_t, sigma_bs=sigma_bs, call_put=pinn.call_put
     )
-    V = (u_bs + U) * K_t
+    from pricing.bergomi_option_pricing import _soft_positive_price
+
+    beta = float(getattr(pinn, "price_softplus_beta", 40.0))
+    V = _soft_positive_price(u_bs + U, beta=beta) * K_t
 
     ones = torch.ones_like(V)
     dV_dS = torch.autograd.grad(

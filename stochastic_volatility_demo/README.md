@@ -15,8 +15,19 @@ steep short-dated smile **and** a milder long-dated skew at the same time.
 
 ```bash
 pip install -r requirements.txt          # includes yfinance
-python stochastic_volatility_demo/run_demo.py
+python stochastic_volatility_demo/run_demo.py            # ^SPX (default, densest)
+python stochastic_volatility_demo/run_demo.py AAPL       # single-name strip
+python stochastic_volatility_demo/run_demo.py auto       # best of AAPL/QQQ/SPY/^SPX
 ```
+
+Default underlier is **^SPX** — Yahoo’s densest live chain with real bid/ask
+(thousands of quotes before a light subsample to ~8×25 for plotting).
+
+**AAPL** (and other single names) also work: after hours Yahoo often blanks
+bid/ask, so the fetcher recovers IV from `lastPrice` via Black–Scholes
+inversion. That yields many points, but inverted last prints can be noisier
+than SPX mid quotes. `auto` mode probes AAPL → QQQ → SPY → ^SPX and keeps
+the best strip (≥5 tenors), preferring native Yahoo IVs.
 
 Artifacts land in `stochastic_volatility_demo/artifacts/`:
 
@@ -28,8 +39,8 @@ Artifacts land in `stochastic_volatility_demo/artifacts/`:
 | `fit_errors_by_tenor.png` | RMSE by maturity — 2F wins on short+long |
 | `fit_errors_by_moneyness.png` | RMSE by log-moneyness bucket |
 | `market_quotes.csv` | Filtered quotes used for the fit |
+| `market_quotes_live.csv` | Full live snapshot before any synthetic fallback |
 | `fit_report.json` | Parameters + RMSE by tenor and by moneyness |
 
-Default underlier: **SPY** via Yahoo Finance (`yfinance`). If the live
-download fails (weekend / rate limit), the script falls back to a cached
-CSV or a realistic synthetic surface so the demo still runs offline.
+If every live download fails, the script falls back to a synthetic
+equity-like surface so the demo still runs offline.

@@ -1,0 +1,40 @@
+Features (28): ['x_norm', 'X1_norm', 'X2_norm', 'tau_norm', 'r_norm', 'xi0_norm', 'omega1_norm', 'omega2_norm', 'kappa1_norm', 'kappa2_norm', 'rho1', 'rho2', 'rho12', 'tau_sq', 'tau_sin', 'tau_cos', 'log_v_drive_norm', 'mr_fast', 'mr_slow', 'x_sq', 'abs_x', 'X1_sq', 'X2_sq', 'x_tau', 'x_X1', 'x_X2', 'X1_X2', 'cp_feat']
+Params: 30,817
+Epoch      1 | Time:       0.08s | LR: 1.000e-04 | Total: 3.624683e-03 | PDE: 3.620535e-03 | Term: 3.728845e-06 | Bnd: 4.196393e-07 | Grad: 2.525e-03 | Best: 3.624683e-03 @ 1
+Epoch     50 | Time:       2.69s | LR: 9.975e-05 | Total: 2.852027e-03 | PDE: 2.839736e-03 | Term: 3.105131e-06 | Bnd: 9.185811e-06 | Grad: 1.469e-03 | Best: 2.018406e-03 @ 46
+Epoch    100 | Time:       5.26s | LR: 9.902e-05 | Total: 1.990266e-03 | PDE: 1.954729e-03 | Term: 1.861952e-05 | Bnd: 1.691846e-05 | Grad: 4.450e-03 | Best: 1.630214e-03 @ 98
+Epoch    150 | Time:       7.88s | LR: 9.780e-05 | Total: 1.644516e-03 | PDE: 1.623893e-03 | Term: 1.899275e-05 | Bnd: 1.630648e-06 | Grad: 3.860e-03 | Best: 1.559993e-03 @ 124
+Epoch    200 | Time:      10.74s | LR: 9.611e-05 | Total: 1.983860e-03 | PDE: 1.969790e-03 | Term: 1.295722e-05 | Bnd: 1.113232e-06 | Grad: 3.401e-03 | Best: 1.450650e-03 @ 180
+Epoch    250 | Time:      13.59s | LR: 9.397e-05 | Total: 1.783084e-03 | PDE: 1.722378e-03 | Term: 5.832859e-05 | Bnd: 2.377566e-06 | Grad: 1.060e-02 | Best: 1.371067e-03 @ 231
+Epoch    300 | Time:      16.48s | LR: 9.141e-05 | Total: 3.663258e-03 | PDE: 3.619994e-03 | Term: 4.210435e-05 | Bnd: 1.160217e-06 | Grad: 5.070e-02 | Best: 1.267839e-03 @ 298
+Epoch    350 | Time:      19.46s | LR: 8.844e-05 | Total: 1.344802e-03 | PDE: 1.319671e-03 | Term: 2.364598e-05 | Bnd: 1.485134e-06 | Grad: 4.652e-03 | Best: 1.225753e-03 @ 323
+Epoch    400 | Time:      22.44s | LR: 8.511e-05 | Total: 1.982264e-03 | PDE: 1.952220e-03 | Term: 2.754172e-05 | Bnd: 2.502059e-06 | Grad: 5.233e-03 | Best: 1.090676e-03 @ 370
+Epoch    450 | Time:      25.63s | LR: 8.145e-05 | Total: 1.629837e-03 | PDE: 1.608039e-03 | Term: 1.899472e-05 | Bnd: 2.802799e-06 | Grad: 1.075e-01 | Best: 1.090676e-03 @ 370
+Epoch    500 | Time:      28.56s | LR: 7.750e-05 | Total: 2.018726e-03 | PDE: 1.952254e-03 | Term: 6.280919e-05 | Bnd: 3.662817e-06 | Grad: 1.039e-02 | Best: 1.090676e-03 @ 370
+Epoch    550 | Time:      31.38s | LR: 7.330e-05 | Total: 2.420490e-03 | PDE: 2.372050e-03 | Term: 4.588044e-05 | Bnd: 2.559055e-06 | Grad: 1.052e-02 | Best: 1.090676e-03 @ 370
+Epoch    600 | Time:      34.13s | LR: 6.891e-05 | Total: 1.879759e-03 | PDE: 1.823041e-03 | Term: 5.299382e-05 | Bnd: 3.724124e-06 | Grad: 1.401e-02 | Best: 1.090676e-03 @ 370
+Epoch    650 | Time:      36.92s | LR: 6.436e-05 | Total: 1.826289e-03 | PDE: 1.785502e-03 | Term: 3.858194e-05 | Bnd: 2.205617e-06 | Grad: 7.851e-03 | Best: 1.090676e-03 @ 370
+Epoch    700 | Time:      39.79s | LR: 5.970e-05 | Total: 1.998768e-03 | PDE: 1.961532e-03 | Term: 3.519109e-05 | Bnd: 2.044379e-06 | Grad: 2.507e-03 | Best: 1.090676e-03 @ 370
+Epoch    750 | Time:      42.58s | LR: 5.500e-05 | Total: 1.521006e-03 | PDE: 1.465499e-03 | Term: 5.257112e-05 | Bnd: 2.936243e-06 | Grad: 5.722e-03 | Best: 1.090676e-03 @ 370
+Epoch    800 | Time:      45.51s | LR: 5.030e-05 | Total: 2.223503e-03 | PDE: 2.162173e-03 | Term: 5.790296e-05 | Bnd: 3.427655e-06 | Grad: 8.880e-03 | Best: 1.090676e-03 @ 370
+Best loss 1.090676e-03 @ epoch 370
+Checkpoint: trained_models/bergomi2.pt
+History: bergomi2/artifacts/training_history.json
+Resume from epoch 370 loss 0.001090675825253129
+Epoch      1 | Time:       0.08s | LR: 5.000e-05 | Total: 2.351880e-03 | PDE: 2.316459e-03 | Term: 3.383820e-05 | Bnd: 1.582636e-06 | Grad: 1.858e-03 | Best: 2.351880e-03 @ 1
+Epoch     50 | Time:       3.06s | LR: 4.989e-05 | Total: 1.917861e-03 | PDE: 1.885794e-03 | Term: 3.025225e-05 | Bnd: 1.814295e-06 | Grad: 2.982e-03 | Best: 1.376259e-03 @ 13
+Epoch    100 | Time:       6.06s | LR: 4.956e-05 | Total: 1.867170e-03 | PDE: 1.809658e-03 | Term: 5.484987e-05 | Bnd: 2.661715e-06 | Grad: 3.507e-02 | Best: 1.275083e-03 @ 98
+Epoch    150 | Time:       9.43s | LR: 4.902e-05 | Total: 1.421303e-03 | PDE: 1.358979e-03 | Term: 6.058656e-05 | Bnd: 1.737540e-06 | Grad: 2.266e-03 | Best: 1.275083e-03 @ 98
+Epoch    200 | Time:      12.42s | LR: 4.827e-05 | Total: 1.894871e-03 | PDE: 1.836532e-03 | Term: 5.645962e-05 | Bnd: 1.879341e-06 | Grad: 2.700e-03 | Best: 1.275083e-03 @ 98
+Epoch    250 | Time:      15.36s | LR: 4.732e-05 | Total: 1.731192e-03 | PDE: 1.703464e-03 | Term: 2.598403e-05 | Bnd: 1.744778e-06 | Grad: 3.484e-03 | Best: 1.268287e-03 @ 231
+Epoch    300 | Time:      18.59s | LR: 4.618e-05 | Total: 2.437526e-03 | PDE: 2.422448e-03 | Term: 1.228799e-05 | Bnd: 2.789785e-06 | Grad: 5.877e-03 | Best: 1.268287e-03 @ 231
+Epoch    350 | Time:      21.91s | LR: 4.486e-05 | Total: 1.391089e-03 | PDE: 1.369009e-03 | Term: 1.962879e-05 | Bnd: 2.451471e-06 | Grad: 5.012e-03 | Best: 1.267609e-03 @ 325
+Epoch    400 | Time:      25.06s | LR: 4.338e-05 | Total: 1.904284e-03 | PDE: 1.865352e-03 | Term: 3.652870e-05 | Bnd: 2.402596e-06 | Grad: 2.454e-02 | Best: 1.073074e-03 @ 370
+Epoch    450 | Time:      28.41s | LR: 4.176e-05 | Total: 1.290244e-03 | PDE: 1.262163e-03 | Term: 2.544917e-05 | Bnd: 2.631802e-06 | Grad: 1.440e-03 | Best: 1.073074e-03 @ 370
+Epoch    500 | Time:      31.51s | LR: 4.000e-05 | Total: 1.730943e-03 | PDE: 1.689050e-03 | Term: 3.960129e-05 | Bnd: 2.291973e-06 | Grad: 1.058e-02 | Best: 1.073074e-03 @ 370
+Epoch    550 | Time:      34.59s | LR: 3.813e-05 | Total: 2.385698e-03 | PDE: 2.338202e-03 | Term: 4.533961e-05 | Bnd: 2.156029e-06 | Grad: 3.568e-03 | Best: 1.073074e-03 @ 370
+Epoch    600 | Time:      37.62s | LR: 3.618e-05 | Total: 1.662978e-03 | PDE: 1.615323e-03 | Term: 4.524683e-05 | Bnd: 2.407331e-06 | Grad: 7.068e-03 | Best: 1.073074e-03 @ 370
+Epoch    650 | Time:      40.72s | LR: 3.416e-05 | Total: 1.769261e-03 | PDE: 1.723336e-03 | Term: 4.373714e-05 | Bnd: 2.188142e-06 | Grad: 1.005e-02 | Best: 1.073074e-03 @ 370
+Epoch    700 | Time:      43.79s | LR: 3.209e-05 | Total: 2.889941e-03 | PDE: 2.836725e-03 | Term: 5.078516e-05 | Bnd: 2.430277e-06 | Grad: 3.320e-02 | Best: 1.073074e-03 @ 370
+Continued best 0.0010730739450082183 @ 370
+Updated history

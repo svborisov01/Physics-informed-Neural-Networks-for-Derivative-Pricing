@@ -1,10 +1,15 @@
 Fetching option surface for ^SPX…
-Using yahoo_finance | symbol=^SPX | spot=7619.3798828125 | n=200 quotes | tenors=8
+Using yahoo_finance | symbol=^SPX | spot=7619.3798828125 | n=200 quotes | tenors=8 | iv=bs_invert_from_mid_else_last | k=log(K/F)
+Yahoo IV MAE vs mid-implied: 0.0157
 
 IV fit RMSE (lower is better):
-  2-factor Bergomi    RMSE=0.0380  MAE=0.0277
-  1-factor Bergomi    RMSE=0.0411  MAE=0.0300
-  Heston-like         RMSE=0.0457  MAE=0.0326
-  Black–Scholes       RMSE=0.0644  MAE=0.0476
+  2-factor Bergomi    RMSE=0.0093  MAE=0.0065
+    params={'xi0': 0.03477428620557308, 'kappa1': 11.084918887840626, 'kappa2': 0.4612578421560135, 'atm1': -0.0170612843440787, 'atm2': -0.0349443914813121, 'skew1': -0.6847589475174891, 'skew2': -0.41857369441159253, 'smile1': 2.6935675655242224, 'smile2': 0.8095124449918679}
+  Heston-like         RMSE=0.0123  MAE=0.0087
+    params={'v0': 0.019874947842461646, 'v_inf': 0.0335356957851136, 'kappa': 1.2609272037501782, 'skew0': -0.5664822919559536, 'skew_decay': 0.7382632260903012, 'smile0': 4.249639779475229, 'smile_decay': 5.59662457680937}
+  1-factor Bergomi    RMSE=0.0123  MAE=0.0088
+    params={'xi0': 0.0380333639175132, 'kappa': 0.7796906219989874, 'atm0': -0.05206405055319886, 'skew0': -0.5752488880532507, 'smile0': 3.9298139445116473, 'smile_decay': 4.886784396583963}
+  Black–Scholes       RMSE=0.0599  MAE=0.0458
+    params={'sigma': 0.18190313496501465}
 
 Wrote artifacts to /workspace/stochastic_volatility_demo/artifacts

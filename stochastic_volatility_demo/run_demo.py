@@ -2,9 +2,9 @@
 """
 Stochastic-volatility demo:
 
-  1. Download (or synthesize) listed option IVs
+  1. Download (or synthesize) listed option IVs (mid-implied, forward moneyness)
   2. Fit BS / Heston / 1F Bergomi / 2F Bergomi parametric surfaces
-  3. Plot fits across *moneyness* (smiles) and across *tenors* (term structure)
+  3. Plot smiles, tenor term structures, and 3D IV surfaces for all four models
 
 The headline result is that **two-factor Bergomi** achieves the lowest error
 on short *and* long tenors simultaneously.
@@ -19,6 +19,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from mpl_toolkits.mplot3d import Axes3D  # noqa: F401
 
 ROOT = Path(__file__).resolve().parent
 if str(ROOT.parent) not in sys.path:
@@ -35,6 +36,13 @@ COLORS = {
     "1-factor Bergomi": "C2",
     "2-factor Bergomi": "C3",
 }
+
+MODEL_ORDER = [
+    "Black–Scholes",
+    "Heston-like",
+    "1-factor Bergomi",
+    "2-factor Bergomi",
+]
 
 
 def _select_tenors(taus: np.ndarray, n: int = 4) -> list[float]:
@@ -56,9 +64,9 @@ def plot_market_surface(df: pd.DataFrame, path: Path):
         alpha=0.9,
         edgecolors="none",
     )
-    ax.set_xlabel(r"Log-moneyness $k=\log(K/S)$")
+    ax.set_xlabel(r"Forward log-moneyness $k=\log(K/F)$")
     ax.set_ylabel(r"Maturity $\tau$")
-    ax.set_title("Market implied volatility surface (OTM strip)")
+    ax.set_title("Market implied volatility (OTM strip, mid-implied BS IV)")
     fig.colorbar(sc, ax=ax, label=r"$\sigma_{\mathrm{IV}}$")
     ax.grid(True, alpha=0.25)
     fig.tight_layout()
@@ -84,7 +92,7 @@ def plot_smile_fits(df: pd.DataFrame, fits, path: Path):
                 label=fr.name,
             )
         ax.set_title(rf"$\tau={tau:.2f}$ y")
-        ax.set_xlabel(r"$k$")
+        ax.set_xlabel(r"$k=\log(K/F)$")
         ax.set_ylabel("IV")
         ax.grid(True, alpha=0.3)
         ax.legend(frameon=False, fontsize=7)
@@ -149,7 +157,7 @@ def plot_tenor_fits(df: pd.DataFrame, fits, path: Path):
     axes[0].set_xlabel(r"Maturity $\tau$")
     axes[0].set_ylabel(r"$\sigma_{\mathrm{ATM}}(\tau)$")
 
-    # 10-delta-ish put wing (k = -0.10)
+    # Put wing (k = -0.10)
     t_w, iv_w = _market_term_structure(df, k_star=-0.10, k_tol=0.04)
     axes[1].scatter(t_w, iv_w, s=28, color="k", zorder=5, label="Market")
     for fr in fits:
@@ -196,6 +204,109 @@ def plot_tenor_fits(df: pd.DataFrame, fits, path: Path):
     plt.close(fig)
 
 
+def plot_model_surfaces(df: pd.DataFrame, fits, path: Path):
+    """3D IV surfaces for market scatter + each of the four fitted models."""
+    by_name = {fr.name: fr for fr in fits}
+    k_min, k_max = float(df["k"].min()), float(df["k"].max())
+    t_min, t_max = float(df["tau"].min()), float(df["tau"].max())
+    kg = np.linspace(k_min, k_max, 50)
+    tg = np.linspace(t_min, t_max, 40)
+    KK, TT = np.meshgrid(kg, tg)
+
+    fig = plt.figure(figsize=(13.5, 9.5), dpi=140)
+    # Market scatter
+    ax0 = fig.add_subplot(2, 3, 1, projection="3d")
+    ax0.scatter(df["k"], df["tau"], df["iv"], c=df["iv"], cmap="turbo", s=12, alpha=0.85)
+    ax0.set_title("Market (mid-implied)")
+    ax0.set_xlabel(r"$k$")
+    ax0.set_ylabel(r"$\tau$")
+    ax0.set_zlabel("IV")
+
+    for i, name in enumerate(MODEL_ORDER, start=2):
+        fr = by_name[name]
+        ZZ = MODEL_FN[name](KK, TT, **fr.params)
+        ax = fig.add_subplot(2, 3, i, projection="3d")
+        ax.plot_surface(
+            KK,
+            TT,
+            ZZ,
+            cmap="turbo",
+            linewidth=0,
+            antialiased=True,
+            alpha=0.92,
+            rstride=1,
+            cstride=1,
+        )
+        ax.set_title(f"{name}\nRMSE={fr.rmse:.4f}")
+        ax.set_xlabel(r"$k$")
+        ax.set_ylabel(r"$\tau$")
+        ax.set_zlabel("IV")
+        # Match z-limits roughly to market for visual comparison
+        ax.set_zlim(float(df["iv"].min()) * 0.9, float(df["iv"].max()) * 1.05)
+
+    # Residual surface for 2F (market minus model on a grid via nearest quotes is noisy;
+    # instead show model vs market scatter residual heatmap in k-τ plane)
+    ax_r = fig.add_subplot(2, 3, 6)
+    fr2 = by_name["2-factor Bergomi"]
+    pred = MODEL_FN[fr2.name](df["k"].to_numpy(), df["tau"].to_numpy(), **fr2.params)
+    resid = pred - df["iv"].to_numpy()
+    sc = ax_r.scatter(
+        df["k"],
+        df["tau"],
+        c=resid,
+        cmap="RdBu_r",
+        s=28,
+        vmin=-np.percentile(np.abs(resid), 95),
+        vmax=np.percentile(np.abs(resid), 95),
+    )
+    ax_r.set_xlabel(r"$k=\log(K/F)$")
+    ax_r.set_ylabel(r"$\tau$")
+    ax_r.set_title("2F residual (model − market)")
+    fig.colorbar(sc, ax=ax_r, fraction=0.046, pad=0.04, label="ΔIV")
+    ax_r.grid(True, alpha=0.25)
+
+    fig.suptitle(
+        "IV surfaces: market + BS / Heston / 1F Bergomi / 2F Bergomi",
+        y=0.995,
+        fontsize=13,
+    )
+    fig.tight_layout()
+    fig.savefig(path, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+
+
+def plot_surface_slices_grid(df: pd.DataFrame, fits, path: Path):
+    """2×2 smile-grid per model (compact surface comparison in k–IV)."""
+    tenors = _select_tenors(df["tau"].to_numpy(), n=4)
+    k_line = np.linspace(df["k"].min(), df["k"].max(), 120)
+    by_name = {fr.name: fr for fr in fits}
+
+    fig, axes = plt.subplots(2, 2, figsize=(11.0, 7.8), dpi=150, sharex=True, sharey=True)
+    for ax, name in zip(axes.ravel(), MODEL_ORDER):
+        fr = by_name[name]
+        for tau in tenors:
+            mkt = df[np.isclose(df["tau"], tau, atol=1e-3)].sort_values("k")
+            ax.scatter(
+                mkt["k"],
+                mkt["iv"],
+                s=14,
+                color="k",
+                alpha=0.35,
+                zorder=3,
+            )
+            pred = MODEL_FN[name](k_line, np.full_like(k_line, tau), **fr.params)
+            ax.plot(k_line, pred, lw=1.8, label=rf"$\tau={tau:.2f}$")
+        ax.set_title(f"{name}  (RMSE={fr.rmse:.4f})")
+        ax.set_xlabel(r"$k=\log(K/F)$")
+        ax.set_ylabel("IV")
+        ax.grid(True, alpha=0.3)
+        ax.legend(frameon=False, fontsize=7)
+    fig.suptitle("Per-model smile surfaces across selected tenors", y=1.01)
+    fig.tight_layout()
+    fig.savefig(path, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+
+
 def plot_errors_by_tenor(fits, path: Path):
     tenors = sorted({t for fr in fits for t in fr.rmse_by_tenor})
     fig, ax = plt.subplots(figsize=(8.2, 4.6), dpi=150)
@@ -221,7 +332,6 @@ def plot_errors_by_tenor(fits, path: Path):
 
 def plot_errors_by_moneyness(fits, path: Path):
     """Companion to tenor RMSE: error buckets across log-moneyness."""
-    # Use 2F keys as canonical bin order when present
     keys = None
     for fr in fits:
         if "2-factor" in fr.name:
@@ -244,7 +354,7 @@ def plot_errors_by_moneyness(fits, path: Path):
         )
     ax.set_xticks(x)
     ax.set_xticklabels([k.replace(":", "–") for k in keys], rotation=15)
-    ax.set_xlabel(r"Log-moneyness bucket $k$")
+    ax.set_xlabel(r"Forward log-moneyness bucket $k$")
     ax.set_ylabel("IV RMSE")
     ax.set_title("Fit error by moneyness: wings vs ATM")
     ax.grid(True, axis="y", alpha=0.3)
@@ -266,8 +376,11 @@ def main(symbol: str | None = "^SPX"):
     print(
         f"Using {meta.get('source')} | symbol={meta.get('symbol')} | "
         f"spot={meta.get('spot')} | n={len(df)} quotes | "
-        f"tenors={len(meta.get('tenors', []))}"
+        f"tenors={len(meta.get('tenors', []))} | "
+        f"iv={meta.get('iv_method')} | k={meta.get('moneyness')}"
     )
+    if meta.get("yahoo_iv_mae_vs_ours") is not None:
+        print(f"Yahoo IV MAE vs mid-implied: {meta['yahoo_iv_mae_vs_ours']:.4f}")
 
     k = df["k"].to_numpy(float)
     tau = df["tau"].to_numpy(float)
@@ -277,6 +390,8 @@ def main(symbol: str | None = "^SPX"):
     plot_market_surface(df, ART / "market_iv_surface.png")
     plot_smile_fits(df, fits, ART / "model_fits_smiles.png")
     plot_tenor_fits(df, fits, ART / "model_fits_tenors.png")
+    plot_model_surfaces(df, fits, ART / "model_iv_surfaces_3d.png")
+    plot_surface_slices_grid(df, fits, ART / "model_surfaces_by_tenor.png")
     plot_errors_by_tenor(fits, ART / "fit_errors_by_tenor.png")
     plot_errors_by_moneyness(fits, ART / "fit_errors_by_moneyness.png")
 
@@ -288,6 +403,9 @@ def main(symbol: str | None = "^SPX"):
                 "rmse": fr.rmse,
                 "mae": fr.mae,
                 "params": fr.params,
+                "hit_bounds": fr.hit_bounds,
+                "success": fr.success,
+                "nfev": fr.nfev,
                 "rmse_by_tenor": {str(a): b for a, b in fr.rmse_by_tenor.items()},
                 "rmse_by_moneyness": {
                     str(a): b for a, b in fr.rmse_by_moneyness.items()
@@ -301,11 +419,13 @@ def main(symbol: str | None = "^SPX"):
 
     print("\nIV fit RMSE (lower is better):")
     for fr in sorted(fits, key=lambda z: z.rmse):
-        print(f"  {fr.name:18s}  RMSE={fr.rmse:.4f}  MAE={fr.mae:.4f}")
+        hits = f"  hit_bounds={fr.hit_bounds}" if fr.hit_bounds else ""
+        print(f"  {fr.name:18s}  RMSE={fr.rmse:.4f}  MAE={fr.mae:.4f}{hits}")
+        print(f"    params={fr.params}")
     print(f"\nWrote artifacts to {ART}")
 
 
 if __name__ == "__main__":
-    # Default ^SPX (richest native Yahoo strip). Also: AAPL, QQQ, SPY, or `auto`.
+    # Default ^SPX (richest strip). Also: AAPL, QQQ, SPY, or `auto`.
     sym = sys.argv[1] if len(sys.argv) > 1 else "^SPX"
     main(sym)

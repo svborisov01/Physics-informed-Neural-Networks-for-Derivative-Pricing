@@ -48,4 +48,5 @@ Artifacts in `stochastic_volatility_demo/artifacts/`:
 | `fit_errors_by_tenor.png` | RMSE by maturity |
 | `fit_report.json` | Params, short/long RMSE, candidate probes |
 | `outliers_removed.csv` | Smile outliers dropped before calibration |
+| `outliers_vs_kept.png` | Kept scatter points vs removed outliers (×) |
 | `live_probe.json` | Optional full multi-symbol probe log |

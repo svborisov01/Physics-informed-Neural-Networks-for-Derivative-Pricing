@@ -136,6 +136,125 @@ def _forward_from_parity(
     return float(Fs.median())
 
 
+def filter_iv_outliers(
+    df: pd.DataFrame,
+    z_max: float = 3.0,
+    max_abs_resid: float = 0.04,
+    max_neighbor_jump: float = 0.06,
+    min_points_per_tenor: int = 6,
+    poly_deg: int = 2,
+) -> tuple[pd.DataFrame, dict]:
+    """
+    Drop smile outliers per tenor using a robust local fit.
+
+    For each maturity:
+      1. Fit a low-order polynomial IV(k)
+      2. Flag points with large MAD z-score *or* absolute residual
+      3. Flag isolated neighbor jumps (spike vs both adjacent strikes)
+    Iterate once after a first pass so the smooth is not pulled by spikes.
+    """
+    if df.empty or "iv" not in df.columns:
+        return df.copy(), {"n_removed": 0, "removed": []}
+
+    work = df.copy().reset_index(drop=True)
+    work["_row"] = np.arange(len(work))
+    removed_rows: list[dict] = []
+
+    def _pass(frame: pd.DataFrame) -> pd.Series:
+        keep = pd.Series(True, index=frame.index)
+        for tau, g in frame.groupby(frame["tau"].round(6), sort=False):
+            g = g.sort_values("k")
+            if len(g) < max(min_points_per_tenor, poly_deg + 2):
+                continue
+            k = g["k"].to_numpy(float)
+            iv = g["iv"].to_numpy(float)
+            # Huber-ish: fit, drop worst 20%, refit
+            coef = np.polyfit(k, iv, poly_deg)
+            pred = np.polyval(coef, k)
+            resid = iv - pred
+            order = np.argsort(np.abs(resid))
+            keep_n = max(poly_deg + 2, int(np.ceil(0.8 * len(g))))
+            coef = np.polyfit(k[order[:keep_n]], iv[order[:keep_n]], poly_deg)
+            pred = np.polyval(coef, k)
+            resid = iv - pred
+            mad = float(np.median(np.abs(resid - np.median(resid)))) + 1e-8
+            z = 0.6745 * resid / mad
+
+            # Neighbor jumps on sorted smile
+            jump = np.zeros_like(iv)
+            if len(iv) >= 3:
+                left = np.abs(iv[1:-1] - iv[:-2])
+                right = np.abs(iv[2:] - iv[1:-1])
+                # spike if both neighbors are far *and* point is off the smooth
+                jump[1:-1] = np.minimum(left, right)
+
+            bad = (np.abs(z) > z_max) | (np.abs(resid) > max_abs_resid)
+            bad |= (jump > max_neighbor_jump) & (np.abs(resid) > 0.5 * max_abs_resid)
+            # Never empty a tenor below min_points
+            n_bad = int(bad.sum())
+            n_keep = len(g) - n_bad
+            if n_keep < min_points_per_tenor and n_bad:
+                # Keep the least-bad points
+                score = np.abs(z) + np.abs(resid) / max_abs_resid
+                order_bad = np.argsort(-score)
+                allow_drop = max(0, len(g) - min_points_per_tenor)
+                bad[:] = False
+                for j in order_bad[:allow_drop]:
+                    if score[j] > z_max * 0.5:
+                        bad[j] = True
+
+            for idx, is_bad, zi, ri, predi in zip(
+                g.index, bad, z, resid, pred
+            ):
+                if not is_bad:
+                    continue
+                keep.loc[idx] = False
+                row = frame.loc[idx]
+                removed_rows.append(
+                    {
+                        "expiry": str(row.get("expiry", "")),
+                        "tau": float(row["tau"]),
+                        "k": float(row["k"]),
+                        "iv": float(row["iv"]),
+                        "smooth_iv": float(predi),
+                        "resid": float(ri),
+                        "z": float(zi),
+                        "side": str(row.get("side", "")),
+                        "strike": float(row.get("strike", np.nan)),
+                    }
+                )
+        return keep
+
+    keep1 = _pass(work)
+    cleaned = work.loc[keep1].copy()
+    if len(cleaned) >= min_points_per_tenor:
+        # Second pass on remaining points
+        keep2 = _pass(cleaned)
+        # Map back: rows dropped in pass2
+        cleaned = cleaned.loc[keep2].copy()
+
+    # Deduplicate removed list by (tau,k)
+    seen = set()
+    uniq = []
+    for r in removed_rows:
+        key = (round(r["tau"], 6), round(r["k"], 6))
+        if key in seen:
+            continue
+        seen.add(key)
+        uniq.append(r)
+
+    info = {
+        "n_before": int(len(df)),
+        "n_after": int(len(cleaned)),
+        "n_removed": int(len(df) - len(cleaned)),
+        "z_max": z_max,
+        "max_abs_resid": max_abs_resid,
+        "max_neighbor_jump": max_neighbor_jump,
+        "removed": uniq,
+    }
+    return cleaned.drop(columns=["_row"], errors="ignore").reset_index(drop=True), info
+
+
 def _subsample_surface(
     df: pd.DataFrame,
     max_tenors: int = 8,
@@ -275,6 +394,14 @@ def fetch_yahoo_options(
     if otm.empty:
         raise RuntimeError("No liquid OTM quotes after filters")
 
+    n_before_outlier = len(otm)
+    otm, outlier_info = filter_iv_outliers(otm)
+    counts = otm.groupby("expiry").size()
+    keep_exp = counts[counts >= min_quotes_per_tenor].index
+    otm = otm[otm["expiry"].isin(keep_exp)].copy()
+    if otm.empty:
+        raise RuntimeError("No liquid OTM quotes after outlier filter")
+
     n_before = len(otm)
     if len(otm["tau"].unique()) > 10 or len(otm) > 400:
         otm = _subsample_surface(otm, max_tenors=8, max_strikes_per_tenor=25)
@@ -325,9 +452,18 @@ def fetch_yahoo_options(
         "forward": "put_call_parity",
         "moneyness": "log(K/F)",
         "iv_method": "bs_invert_from_mid_else_last",
+        "outlier_filter": {
+            "n_before": outlier_info["n_before"],
+            "n_after": outlier_info["n_after"],
+            "n_removed": outlier_info["n_removed"],
+            "z_max": outlier_info["z_max"],
+            "max_abs_resid": outlier_info["max_abs_resid"],
+            "max_neighbor_jump": outlier_info["max_neighbor_jump"],
+        },
         "source": "yahoo_finance",
         "fetched_at_utc": datetime.now(timezone.utc).isoformat(),
         "n_quotes": int(len(out)),
+        "n_quotes_before_outlier_filter": int(n_before_outlier),
         "n_quotes_before_subsample": int(n_before),
         "n_iv_from_mid": int((out["iv_source"] == "mid").sum()),
         "n_iv_from_last": int((out["iv_source"] == "last").sum()),
@@ -337,6 +473,7 @@ def fetch_yahoo_options(
         "tenors": sorted({float(t) for t in out["tau"].unique()}),
         "tau_min": tau_min,
         "tau_max": tau_max,
+        "outliers_removed": outlier_info["removed"],
     }
     return out, meta
 

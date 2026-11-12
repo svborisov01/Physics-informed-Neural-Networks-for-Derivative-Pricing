@@ -16,7 +16,9 @@ ATM+skew+smile. Residuals are equal-weighted by tenor.
 
 Yahoo’s `impliedVolatility` is **not** used for fitting. Per-expiry forward
 \(F\) comes from put-call parity; IVs are re-implied from mid (else last)
-with moneyness \(k=\log(K/F)\). Wide spreads are dropped.
+with moneyness \(k=\log(K/F)\). Wide spreads are dropped. Per-tenor **smile
+outliers** are removed via a robust quadratic fit (MAD z-score, absolute
+residual, and neighbor-jump spikes) before calibration.
 
 ## Run
 
@@ -45,4 +47,5 @@ Artifacts in `stochastic_volatility_demo/artifacts/`:
 | `model_surfaces_by_tenor.png` | Per-model smile grids |
 | `fit_errors_by_tenor.png` | RMSE by maturity |
 | `fit_report.json` | Params, short/long RMSE, candidate probes |
+| `outliers_removed.csv` | Smile outliers dropped before calibration |
 | `live_probe.json` | Optional full multi-symbol probe log |

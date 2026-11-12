@@ -120,7 +120,7 @@ def main():
     fig.savefig(out_dir / "atm_term_structure.png", bbox_inches="tight")
     plt.close(fig)
 
-    # Single-point smoke check
+    # Single-point smoke check (use checkpoint sigma_mode)
     price = float(
         predict_price(
             pinn,
@@ -138,6 +138,8 @@ def main():
             rho1=-0.6,
             rho2=-0.3,
             rho12=0.2,
+            sigma_mode=market["sigma_mode"],
+            stationary=market["stationary"],
         )
         .detach()
         .cpu()

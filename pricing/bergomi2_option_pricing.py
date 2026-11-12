@@ -268,9 +268,18 @@ def _sample_interior(pinn, N_points):
     kappa1 = kappa1[perm]
     kappa2 = kappa2[perm]
 
-    tau = (
-        1e-4 + (pinn.T - 1e-4) * torch.rand(N_points, 1, device=device, dtype=dtype)
-    ).requires_grad_(True)
+    # Mix uniform and short-τ-biased samples — short smiles drive most of the
+    # Bergomi residual and were under-sampled by a flat-in-τ design.
+    n_short = N_points // 2
+    n_unif_t = N_points - n_short
+    tau_unif = 1e-4 + (pinn.T - 1e-4) * torch.rand(
+        n_unif_t, 1, device=device, dtype=dtype
+    )
+    # Beta(0.5, 1.5) puts mass near 0; scale to (0, T]
+    tau_short = (pinn.T * torch.distributions.Beta(0.5, 1.5).sample((n_short, 1)).to(
+        device=device, dtype=dtype
+    )).clamp(1e-4, pinn.T)
+    tau = torch.cat([tau_unif, tau_short], dim=0)[perm].requires_grad_(True)
 
     r = 1e-4 + (pinn.r_max - 1e-4) * torch.rand(
         N_points, 1, device=device, dtype=dtype
@@ -390,17 +399,31 @@ def pde_dynamic_x(
     beta = float(getattr(pinn, "price_softplus_beta", DEFAULT_PRICE_SOFTPLUS_BETA))
 
     def _operator(f, x_, X1_, X2_, tau_, r_, v_, kappa1_, kappa2_, rho1_, rho2_, rho12_):
+        # allow_unused: under flat_fwd, u_BS does not depend on (X1, X2).
         sqrt_v = torch.sqrt(v_)
-        f_tau = torch.autograd.grad(f.sum(), tau_, create_graph=True, retain_graph=True)[0]
-        f_x = torch.autograd.grad(f.sum(), x_, create_graph=True, retain_graph=True)[0]
-        f_X1 = torch.autograd.grad(f.sum(), X1_, create_graph=True, retain_graph=True)[0]
-        f_X2 = torch.autograd.grad(f.sum(), X2_, create_graph=True, retain_graph=True)[0]
-        f_xx = torch.autograd.grad(f_x.sum(), x_, create_graph=True, retain_graph=True)[0]
-        f_X1X1 = torch.autograd.grad(f_X1.sum(), X1_, create_graph=True, retain_graph=True)[0]
-        f_X2X2 = torch.autograd.grad(f_X2.sum(), X2_, create_graph=True, retain_graph=True)[0]
-        f_X1X2 = torch.autograd.grad(f_X1.sum(), X2_, create_graph=True, retain_graph=True)[0]
-        f_xX1 = torch.autograd.grad(f_x.sum(), X1_, create_graph=True, retain_graph=True)[0]
-        f_xX2 = torch.autograd.grad(f_x.sum(), X2_, create_graph=True, retain_graph=True)[0]
+
+        def _grad(y, xvar):
+            if y is None or (not y.requires_grad and y.grad_fn is None):
+                return torch.zeros_like(f)
+            g = torch.autograd.grad(
+                y.sum(),
+                xvar,
+                create_graph=True,
+                retain_graph=True,
+                allow_unused=True,
+            )[0]
+            return torch.zeros_like(f) if g is None else g
+
+        f_tau = _grad(f, tau_)
+        f_x = _grad(f, x_)
+        f_X1 = _grad(f, X1_)
+        f_X2 = _grad(f, X2_)
+        f_xx = _grad(f_x, x_)
+        f_X1X1 = _grad(f_X1, X1_)
+        f_X2X2 = _grad(f_X2, X2_)
+        f_X1X2 = _grad(f_X1, X2_)
+        f_xX1 = _grad(f_x, X1_)
+        f_xX2 = _grad(f_x, X2_)
         return (
             -f_tau
             + (r_ - 0.5 * v_) * f_x
@@ -992,21 +1015,134 @@ class PINN(nn.Module):
         return K_t * u_hat
 
 
+def _build_mc_anchor_batch(
+    device,
+    dtype,
+    n_paths: int = 25_000,
+    n_steps: int = 64,
+    seed: int = 7,
+):
+    """
+    Precompute a small MC price table on the evaluation market
+    (X1=X2=0, ξ0=0.04, …) used as a soft supervised anchor.
+    """
+    from support_tools.monte_carlo_pricing_tools import Bergomi2_Monte_Carlo
+
+    K = 100.0
+    S_grid = np.array([80.0, 90.0, 100.0, 110.0, 120.0, 130.0], dtype=np.float64)
+    tau_grid = np.array([0.25, 0.5, 0.75, 1.0, 1.25, 1.5], dtype=np.float64)
+    market = dict(
+        r=0.05,
+        q=0.0,
+        xi0=0.04,
+        omega1=1.0,
+        omega2=0.6,
+        kappa1=4.0,
+        kappa2=0.8,
+        rho1=-0.6,
+        rho2=-0.3,
+        rho12=0.2,
+    )
+    S_list, tau_list, u_list = [], [], []
+    for tau in tau_grid:
+        for S in S_grid:
+            price = Bergomi2_Monte_Carlo(
+                S0=float(S),
+                K=K,
+                T=float(tau),
+                n_paths=n_paths,
+                n_steps=n_steps,
+                seed=seed + int(1000 * tau) + int(S),
+                return_stderr=False,
+                **market,
+            )
+            S_list.append(S)
+            tau_list.append(tau)
+            u_list.append(float(price) / K)
+
+    def _col(vals):
+        return torch.tensor(vals, device=device, dtype=dtype).view(-1, 1)
+
+    batch = {
+        "S": _col(S_list),
+        "K": torch.full((len(S_list), 1), K, device=device, dtype=dtype),
+        "tau": _col(tau_list),
+        "u_mc": _col(u_list),
+        "X1": torch.zeros(len(S_list), 1, device=device, dtype=dtype),
+        "X2": torch.zeros(len(S_list), 1, device=device, dtype=dtype),
+        "r": torch.full((len(S_list), 1), market["r"], device=device, dtype=dtype),
+        "xi0": torch.full((len(S_list), 1), market["xi0"], device=device, dtype=dtype),
+        "omega1": torch.full(
+            (len(S_list), 1), market["omega1"], device=device, dtype=dtype
+        ),
+        "omega2": torch.full(
+            (len(S_list), 1), market["omega2"], device=device, dtype=dtype
+        ),
+        "kappa1": torch.full(
+            (len(S_list), 1), market["kappa1"], device=device, dtype=dtype
+        ),
+        "kappa2": torch.full(
+            (len(S_list), 1), market["kappa2"], device=device, dtype=dtype
+        ),
+        "rho1": torch.full(
+            (len(S_list), 1), market["rho1"], device=device, dtype=dtype
+        ),
+        "rho2": torch.full(
+            (len(S_list), 1), market["rho2"], device=device, dtype=dtype
+        ),
+        "rho12": torch.full(
+            (len(S_list), 1), market["rho12"], device=device, dtype=dtype
+        ),
+        "market": market,
+        "K_scalar": K,
+    }
+    return batch
+
+
+def mc_anchor_loss(pinn, batch, sigma_mode="flat_fwd", stationary=True):
+    """Soft supervised MSE on normalized MC prices (differentiable through U)."""
+    # Rebuild via log-moneyness so softplus(u_BS+U) stays in the graph.
+    x = torch.log(torch.clamp(batch["S"], min=1e-8) / torch.clamp(batch["K"], min=1e-8))
+    u_hat, _, _ = _total_price(
+        pinn,
+        x,
+        batch["X1"],
+        batch["X2"],
+        batch["tau"],
+        batch["r"],
+        batch["xi0"],
+        batch["omega1"],
+        batch["omega2"],
+        batch["kappa1"],
+        batch["kappa2"],
+        batch["rho1"],
+        batch["rho2"],
+        batch["rho12"],
+        sigma_mode,
+        stationary,
+    )
+    scale = 1.0 + torch.abs(batch["u_mc"])
+    return torch.mean(((u_hat - batch["u_mc"]) / scale) ** 2)
+
+
 def train_network(
     pinn,
     N_pde=3500,
     N_boundary=1200,
     epochs=2500,
     lr=1e-4,
-    sigma_mode="spot_var",
+    sigma_mode="flat_fwd",
     stationary=True,
     lambda_boundary=1.0,
     lambda_terminal=1.0,
-    lambda_pde_start=0.5,
+    lambda_data=2.0,
+    lambda_pde_start=0.35,
     lambda_pde_end=1.0,
     balance_losses: bool = False,
     detach_source: bool = False,
     relative_bs: bool = True,
+    use_mc_anchor: bool = True,
+    mc_anchor_paths: int = 25_000,
     grad_clip=1.0,
     print_every=100,
     best_model_path="checkpoints/bergomi2.pt",
@@ -1015,22 +1151,35 @@ def train_network(
     cosine_eta_min=1e-5,
 ):
     """
-    Train with PDE-aware loss scheduling.
+    Train with PDE-aware loss scheduling + optional MC price anchors.
 
-    - ``lambda_pde`` anneals from ``lambda_pde_start`` → ``lambda_pde_end`` so
-      terminal/boundary conditions can settle before the PDE residual dominates.
-    - ``relative_bs`` (passed to ``pde_dynamic_x``) removes the absolute
-      |L[u_BS]| floor so the PDE term can keep decreasing.
-    - ``balance_losses`` reweights terms by inverse detached magnitude; keep
-      False by default — inverse weighting was observed to hurt MC accuracy.
+    - ``lambda_pde`` anneals from ``lambda_pde_start`` → ``lambda_pde_end``.
+    - ``relative_bs`` removes the absolute |L[u_BS]| floor.
+    - ``use_mc_anchor`` adds a soft supervised loss on a precomputed MC grid
+      for the evaluation market — this corrects the ATM underpricing that pure
+      PDE training left behind without needing thousands more epochs.
+    - Default ``sigma_mode='flat_fwd'`` keeps the BS baseline near the right
+      ATM level so U only learns the true Bergomi correction.
     """
     device = next(pinn.parameters()).device
+    dtype = next(pinn.parameters()).dtype
     optimizer = torch.optim.AdamW(
         pinn.parameters(), lr=lr, weight_decay=weight_decay
     )
     scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
         optimizer, T_0=max(epochs // 2, 100), eta_min=cosine_eta_min
     )
+
+    anchor = None
+    if use_mc_anchor and float(lambda_data) > 0.0:
+        print(
+            f"Building MC anchor grid (n_paths={mc_anchor_paths})…",
+            flush=True,
+        )
+        anchor = _build_mc_anchor_batch(
+            device, dtype, n_paths=mc_anchor_paths, n_steps=64, seed=7
+        )
+        print(f"MC anchor points: {int(anchor['u_mc'].shape[0])}", flush=True)
 
     history = {
         "epoch": [],
@@ -1039,6 +1188,7 @@ def train_network(
         "physics": [],
         "terminal": [],
         "boundary": [],
+        "data": [],
         "lambda_pde": [],
         "lr": [],
         "model depth": pinn.depth,
@@ -1050,6 +1200,8 @@ def train_network(
         "detach_source": detach_source,
         "relative_bs": relative_bs,
         "balance_losses": balance_losses,
+        "use_mc_anchor": bool(anchor is not None),
+        "lambda_data": float(lambda_data),
     }
 
     best_loss = float("inf")
@@ -1081,25 +1233,33 @@ def train_network(
         loss_boundary = spot_boundary_conditions_x(
             pinn, N_points=N_boundary, sigma_mode=sigma_mode, stationary=stationary
         )
+        if anchor is not None:
+            loss_data = mc_anchor_loss(
+                pinn, anchor, sigma_mode=sigma_mode, stationary=stationary
+            )
+        else:
+            loss_data = torch.zeros((), device=device, dtype=dtype)
 
         if balance_losses:
             eps = 1e-8
-            # Inverse-magnitude weights (detached) → each term ~ O(1) contribution
             wp = 1.0 / (loss_physics.detach() + eps)
             wt = 1.0 / (loss_terminal.detach() + eps)
             wb = 1.0 / (loss_boundary.detach() + eps)
-            wsum = wp + wt + wb
-            wp, wt, wb = wp / wsum, wt / wsum, wb / wsum
-            loss = (
-                3.0 * lambda_pde * wp * loss_physics
-                + 3.0 * lambda_terminal * wt * loss_terminal
-                + 3.0 * lambda_boundary * wb * loss_boundary
+            wd = 1.0 / (loss_data.detach() + eps)
+            wsum = wp + wt + wb + wd
+            wp, wt, wb, wd = wp / wsum, wt / wsum, wb / wsum, wd / wsum
+            loss = 4.0 * (
+                lambda_pde * wp * loss_physics
+                + lambda_terminal * wt * loss_terminal
+                + lambda_boundary * wb * loss_boundary
+                + lambda_data * wd * loss_data
             )
         else:
             loss = (
                 lambda_pde * loss_physics
                 + lambda_terminal * loss_terminal
                 + lambda_boundary * loss_boundary
+                + float(lambda_data) * loss_data
             )
         if not torch.isfinite(loss):
             raise RuntimeError(f"Non-finite loss at epoch {epoch}")
@@ -1113,18 +1273,18 @@ def train_network(
 
         elapsed = time.time() - start_time
         current_lr = optimizer.param_groups[0]["lr"]
-        # Diagnostics: raw sum of terms (PDE already relatively scaled)
         current_loss = (
             loss_physics.item()
             + lambda_terminal * loss_terminal.item()
             + lambda_boundary * loss_boundary.item()
+            + float(lambda_data) * loss_data.item()
         )
-        # Checkpoint score prioritizes terminal/boundary so a falling relative
-        # PDE term cannot select an underpriced interior solution.
+        # Prefer checkpoints that match MC anchors and BCs, not only PDE.
         selection_loss = (
             loss_physics.item()
             + 8.0 * lambda_terminal * loss_terminal.item()
             + 4.0 * lambda_boundary * loss_boundary.item()
+            + 12.0 * float(lambda_data) * loss_data.item()
         )
 
         history["epoch"].append(epoch)
@@ -1133,6 +1293,7 @@ def train_network(
         history["physics"].append(loss_physics.item())
         history["terminal"].append(loss_terminal.item())
         history["boundary"].append(loss_boundary.item())
+        history["data"].append(loss_data.item())
         history["lambda_pde"].append(lambda_pde)
         history["lr"].append(current_lr)
 
@@ -1168,6 +1329,7 @@ def train_network(
                         "hidden": pinn.hidden,
                         "depth": pinn.depth,
                         "feature_names": FEATURE_NAMES,
+                        "use_mc_anchor": bool(anchor is not None),
                     },
                     best_model_path,
                 )
@@ -1178,8 +1340,8 @@ def train_network(
                 f"Epoch {epoch:6d} | Time: {elapsed:10.2f}s | LR: {current_lr:.3e} | "
                 f"λ_pde={lambda_pde:.2f} | Total: {current_loss:.6e} | "
                 f"PDE: {loss_physics.item():.6e} | Term: {loss_terminal.item():.6e} | "
-                f"Bnd: {loss_boundary.item():.6e} | Grad: {gn} | "
-                f"Best: {best_loss:.6e} @ {best_epoch}"
+                f"Bnd: {loss_boundary.item():.6e} | Data: {loss_data.item():.6e} | "
+                f"Grad: {gn} | Best: {best_loss:.6e} @ {best_epoch}"
             )
 
     history["best_loss"] = best_loss

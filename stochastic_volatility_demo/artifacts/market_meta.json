@@ -1,0 +1,30 @@
+{
+  "symbol": "SYNTHETIC",
+  "spot": 500.0,
+  "source": "synthetic_equity_like",
+  "fetched_at_utc": "2026-11-12T09:37:29.925951+00:00",
+  "n_quotes": 126,
+  "tenors": [
+    0.08,
+    0.17,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+  ],
+  "live_attempt": {
+    "symbol": "SPY",
+    "spot": 759.8099975585938,
+    "source": "yahoo_finance",
+    "fetched_at_utc": "2026-11-12T09:37:29.921522+00:00",
+    "n_quotes": 34,
+    "tenors": [
+      0.3805612594113621,
+      0.6297056810403833,
+      0.8815879534565366
+    ],
+    "tau_min": 0.05,
+    "tau_max": 1.6
+  },
+  "note": "Synthetic surface used so short- and long-dated smiles are both populated; live Yahoo snapshot saved alongside when available."
+}

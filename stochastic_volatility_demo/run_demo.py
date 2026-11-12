@@ -254,13 +254,19 @@ def plot_errors_by_moneyness(fits, path: Path):
     plt.close(fig)
 
 
-def main(symbol: str = "SPY"):
+def main(symbol: str | None = "^SPX"):
     ART.mkdir(parents=True, exist_ok=True)
-    print(f"Fetching option surface for {symbol}…")
+    if symbol is None or str(symbol).lower() == "auto":
+        label = "auto (AAPL→QQQ→SPY→^SPX)"
+        symbol = None
+    else:
+        label = symbol
+    print(f"Fetching option surface for {label}…")
     df, meta = load_or_fetch(symbol=symbol)
     print(
-        f"Using {meta.get('source')} | spot={meta.get('spot')} | "
-        f"n={len(df)} quotes | tenors={len(meta.get('tenors', []))}"
+        f"Using {meta.get('source')} | symbol={meta.get('symbol')} | "
+        f"spot={meta.get('spot')} | n={len(df)} quotes | "
+        f"tenors={len(meta.get('tenors', []))}"
     )
 
     k = df["k"].to_numpy(float)
@@ -300,5 +306,6 @@ def main(symbol: str = "SPY"):
 
 
 if __name__ == "__main__":
-    sym = sys.argv[1] if len(sys.argv) > 1 else "SPY"
+    # Default ^SPX (richest native Yahoo strip). Also: AAPL, QQQ, SPY, or `auto`.
+    sym = sys.argv[1] if len(sys.argv) > 1 else "^SPX"
     main(sym)

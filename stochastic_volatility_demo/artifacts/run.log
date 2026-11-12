@@ -1,11 +1,10 @@
-Fetching option surface for SPY…
-[fetch] live surface has 3 tenor(s); using synthetic equity-like surface for the demo fit
-Using synthetic_equity_like | spot=500.0 | n=126 quotes | tenors=6
+Fetching option surface for ^SPX…
+Using yahoo_finance | symbol=^SPX | spot=7619.3798828125 | n=200 quotes | tenors=8
 
 IV fit RMSE (lower is better):
-  2-factor Bergomi    RMSE=0.0021  MAE=0.0017
-  1-factor Bergomi    RMSE=0.0043  MAE=0.0032
-  Heston-like         RMSE=0.0071  MAE=0.0048
-  Black–Scholes       RMSE=0.0259  MAE=0.0209
+  2-factor Bergomi    RMSE=0.0380  MAE=0.0277
+  1-factor Bergomi    RMSE=0.0411  MAE=0.0300
+  Heston-like         RMSE=0.0457  MAE=0.0326
+  Black–Scholes       RMSE=0.0644  MAE=0.0476
 
 Wrote artifacts to /workspace/stochastic_volatility_demo/artifacts

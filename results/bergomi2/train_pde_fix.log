@@ -26,5 +26,5 @@ Epoch   1100 | Time:      89.53s | LR: 1.603e-05 | λ_pde=1.00 | Total: 6.083850
 Epoch   1150 | Time:      93.84s | LR: 1.153e-05 | λ_pde=1.00 | Total: 5.316983e-04 | PDE: 5.037349e-04 | Term: 2.644505e-05 | Bnd: 1.518437e-06 | Grad: 6.591e-04 | Best: 4.815840e-04 @ 964
 Epoch   1200 | Time:      98.01s | LR: 1.000e-04 | λ_pde=1.00 | Total: 5.370941e-04 | PDE: 5.114233e-04 | Term: 2.427533e-05 | Bnd: 1.395459e-06 | Grad: 1.407e-03 | Best: 4.815840e-04 @ 964
 Best loss 4.815840e-04 @ epoch 964
-Checkpoint: trained_models/bergomi2.pt
-History: bergomi2/artifacts/training_history.json
+Checkpoint: checkpoints/bergomi2.pt
+History: results/bergomi2/training_history.json

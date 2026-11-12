@@ -29,11 +29,11 @@ from support_tools.model_wrapper import load_model
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--checkpoint", default="trained_models/bergomi.pt")
-    p.add_argument("--out-dir", default="artifacts/bergomi_extensive_tests")
+    p.add_argument("--checkpoint", default="checkpoints/bergomi.pt")
+    p.add_argument("--out-dir", default="results/bergomi")
     p.add_argument(
         "--copy-artifacts",
-        default="/opt/cursor/artifacts/bergomi_extensive_tests",
+        default="/opt/cursor/results/bergomi",
     )
     p.add_argument("--device", default="cpu")
     args = p.parse_args()

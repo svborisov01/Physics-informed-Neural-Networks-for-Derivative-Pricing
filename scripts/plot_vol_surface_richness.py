@@ -68,7 +68,7 @@ def bergomi2_like_iv(
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--out-dir", default="bergomi2/artifacts")
+    p.add_argument("--out-dir", default="results/bergomi2")
     args = p.parse_args()
     out = Path(args.out_dir)
     out.mkdir(parents=True, exist_ok=True)

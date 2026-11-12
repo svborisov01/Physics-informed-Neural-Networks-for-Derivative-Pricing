@@ -23,15 +23,14 @@ from support_tools.monte_carlo_pricing_tools import Bergomi2_Monte_Carlo
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--checkpoint", default="trained_models/bergomi2.pt")
-    p.add_argument("--out-dir", default="bergomi2")
+    p.add_argument("--checkpoint", default="checkpoints/bergomi2.pt")
+    p.add_argument("--out-dir", default="results/bergomi2")
     p.add_argument("--n-mc-paths", type=int, default=40_000)
     p.add_argument("--device", default="cpu")
     args = p.parse_args()
 
     out_dir = Path(args.out_dir)
-    art = out_dir / "artifacts"
-    art.mkdir(parents=True, exist_ok=True)
+    out_dir.mkdir(parents=True, exist_ok=True)
 
     pinn, meta = load_model(args.checkpoint, device=args.device)
     pinn.eval()
@@ -90,7 +89,7 @@ def main():
             "price_softplus_beta": meta.get("price_softplus_beta"),
         },
     }
-    with open(art / "test_report.json", "w", encoding="utf-8") as f:
+    with open(out_dir / "test_report.json", "w", encoding="utf-8") as f:
         json.dump(report, f, indent=2)
 
     # Error heatmap
@@ -103,7 +102,7 @@ def main():
     )
     fig.colorbar(im, ax=ax, label="|ΔV|")
     fig.tight_layout()
-    fig.savefig(art / "abs_err_heatmap.png", bbox_inches="tight")
+    fig.savefig(out_dir / "abs_err_heatmap.png", bbox_inches="tight")
     plt.close(fig)
 
     # ATM term structure vs MC
@@ -118,7 +117,7 @@ def main():
     ax.grid(True, alpha=0.3)
     ax.legend(frameon=False)
     fig.tight_layout()
-    fig.savefig(art / "atm_term_structure.png", bbox_inches="tight")
+    fig.savefig(out_dir / "atm_term_structure.png", bbox_inches="tight")
     plt.close(fig)
 
     # Single-point smoke check
@@ -164,7 +163,7 @@ def main():
     )
     print(f"ATM T=1: PINN={price:.4f}  MC={mc[0]:.4f} ± {mc[1]:.4f}")
     report["atm_T1"] = {"pinn": price, "mc": mc[0], "mc_se": mc[1]}
-    with open(art / "test_report.json", "w", encoding="utf-8") as f:
+    with open(out_dir / "test_report.json", "w", encoding="utf-8") as f:
         json.dump(report, f, indent=2)
 
     print(json.dumps({k: report[k] for k in ("RMSE", "MAE", "Max_err", "test_seconds")}, indent=2))

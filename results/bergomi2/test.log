@@ -1,4 +1,4 @@
-Loaded trained_models/bergomi2.pt | type= bergomi2
+Loaded checkpoints/bergomi2.pt | type= bergomi2
 Model: Bergomi (2-factor)
 MSE = 0.1528683483340655
 RMSE = 0.3909838210643319

@@ -2,7 +2,7 @@
 """CLI entry point for extensive Bergomi PINN vs QMC+ADD tests.
 
 Default checkpoint is the softplus-β=400 base model
-(`trained_models/bergomi.pt`). Reports include absolute/relative norms,
+(`checkpoints/bergomi.pt`). Reports include absolute/relative norms,
 negativity counts, Greeks, and 3D surfaces.
 """
 
@@ -25,12 +25,12 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument(
         "--checkpoint",
-        default="trained_models/bergomi.pt",
+        default="checkpoints/bergomi.pt",
         help="Path to Bergomi PINN checkpoint",
     )
     p.add_argument(
         "--out-dir",
-        default="artifacts/bergomi_extensive_tests",
+        default="results/bergomi",
         help="Directory for heatmaps, npz, and report.json",
     )
     p.add_argument("--device", default="cpu")
@@ -39,7 +39,7 @@ def main():
     p.add_argument("--n-steps", type=int, default=128)
     p.add_argument(
         "--copy-artifacts",
-        default="/opt/cursor/artifacts/bergomi_extensive_tests",
+        default="/opt/cursor/results/bergomi",
         help="Optional mirror directory for Cursor artifacts",
     )
     args = p.parse_args()

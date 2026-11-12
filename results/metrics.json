@@ -1,0 +1,49 @@
+{
+  "two_d": {
+    "checkpoint": "two_d.pt",
+    "benchmark": "Black\u2013Scholes closed form",
+    "RMSE": 0.23751127848243653,
+    "MAE": 0.19194893032104837,
+    "Max_err": 1.603170394897461,
+    "n_points": 12050,
+    "ATM_T1_PINN": 10.683809280395508
+  },
+  "hd": {
+    "checkpoint": "hd_minimal.pt",
+    "benchmark": "Black\u2013Scholes closed form",
+    "RMSE": 0.3010811288602187,
+    "MAE": 0.23684019125821118,
+    "Max_err": 1.2193546295166016,
+    "n_points": 12050,
+    "ATM_T1_PINN": 10.190763473510742
+  },
+  "heston": {
+    "checkpoint": "long_training_heston.pt",
+    "benchmark": "Heston COS",
+    "RMSE": 0.21579849417247773,
+    "MAE": 0.17214103989455956,
+    "Max_err": 0.4409383977525181,
+    "n_points": 3300,
+    "ATM_T1_PINN": 29.946741104125977
+  },
+  "bergomi": {
+    "checkpoint": "bergomi.pt",
+    "benchmark": "QMC+ADD (131072 paths)",
+    "RMSE": 0.1372598487458012,
+    "MAE": 0.11017964690265607,
+    "Max_err": 0.32067164774365864,
+    "n_points": 1479,
+    "rel_RMSE": 0.061035863820853783,
+    "n_negative": 0
+  },
+  "bergomi2": {
+    "checkpoint": "bergomi2.pt",
+    "benchmark": "Monte Carlo (40k paths)",
+    "RMSE": 0.3909838210643319,
+    "MAE": 0.324626611634688,
+    "Max_err": 0.6608658538629832,
+    "n_points": 36,
+    "ATM_T1_PINN": 9.87553882598877,
+    "ATM_T1_ref": 10.113786879752139
+  }
+}

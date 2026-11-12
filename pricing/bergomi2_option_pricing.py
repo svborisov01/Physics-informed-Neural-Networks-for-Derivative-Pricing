@@ -682,7 +682,7 @@ class PINN(nn.Module):
 
         u ~= softplus_β( u_BS + U(x, X1, X2, τ, params) )
 
-    Optimal 28-feature map documented in FEATURE_NAMES / bergomi2/README.md.
+    Optimal 28-feature map documented in FEATURE_NAMES / results/results/bergomi2/README.md.
     Distinguishing attributes: X1_max, X2_max (vs X_max for 1-factor).
     """
 
@@ -1009,7 +1009,7 @@ def train_network(
     relative_bs: bool = True,
     grad_clip=1.0,
     print_every=100,
-    best_model_path="trained_models/bergomi2.pt",
+    best_model_path="checkpoints/bergomi2.pt",
     save_model=True,
     weight_decay=1e-2,
     cosine_eta_min=1e-5,

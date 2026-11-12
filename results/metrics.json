@@ -39,11 +39,12 @@
   "bergomi2": {
     "checkpoint": "bergomi2.pt",
     "benchmark": "Monte Carlo (40k paths)",
-    "RMSE": 0.3909838210643319,
-    "MAE": 0.324626611634688,
-    "Max_err": 0.6608658538629832,
+    "RMSE": 0.3086702962521878,
+    "MAE": 0.2549381531765984,
+    "Max_err": 0.5873047737346297,
     "n_points": 36,
-    "ATM_T1_PINN": 9.87553882598877,
-    "ATM_T1_ref": 10.113786879752139
+    "ATM_T1_PINN": 10.285609245300293,
+    "ATM_T1_ref": 10.113786879752139,
+    "sigma_mode": "flat_fwd"
   }
 }

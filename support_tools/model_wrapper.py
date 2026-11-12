@@ -7,6 +7,7 @@ visualizing results, and computing Greeks across all supported model types:
   - hd      : variable r, sigma Black–Scholes (4 inputs: x, tau, r, sigma)
   - heston  : Heston correction model (price = u_bs + U)
   - bergomi : 1-factor Bergomi correction model (softplus(u_bs + U))
+  - bergomi2: 2-factor Bergomi correction model (softplus(u_bs + U))
 """
 
 from __future__ import annotations
@@ -31,6 +32,7 @@ class ModelType(str, Enum):
     HD = "hd"
     HESTON = "heston"
     BERGOMI = "bergomi"
+    BERGOMI2 = "bergomi2"
 
 
 # Known architecture overrides for bundled checkpoints (hidden, depth).
@@ -47,6 +49,9 @@ LEGACY_CHECKPOINTS = {"hd.pt", "heston.pt", "wide_moneyness_heston.pt"}
 
 def detect_model_type(pinn: nn.Module) -> ModelType:
     """Detect model type from a PINN instance."""
+    # 2-factor Bergomi first (has X1_max / X2_max)
+    if hasattr(pinn, "X1_max") and hasattr(pinn, "X2_max") and hasattr(pinn, "xi0_max"):
+        return ModelType.BERGOMI2
     if hasattr(pinn, "X_max") and hasattr(pinn, "xi0_max"):
         return ModelType.BERGOMI
     if hasattr(pinn, "v_max") and hasattr(pinn, "kappa_max"):
@@ -58,12 +63,16 @@ def detect_model_type(pinn: nn.Module) -> ModelType:
     raise ValueError(
         "Cannot detect model type. Expected a PINN from "
         "two_d_option_pricing, hd_option_pricing, heston_option_pricing, "
-        "or bergomi_option_pricing."
+        "bergomi_option_pricing, or bergomi2_option_pricing."
     )
 
 
 def detect_model_type_from_checkpoint(ckpt: dict) -> ModelType:
     """Detect model type from checkpoint metadata."""
+    if ckpt.get("model_type") == "bergomi2" or (
+        "X1_max" in ckpt and "X2_max" in ckpt and "xi0_max" in ckpt
+    ):
+        return ModelType.BERGOMI2
     if "X_max" in ckpt and "xi0_max" in ckpt:
         return ModelType.BERGOMI
     if "v_max" in ckpt and "kappa_max" in ckpt:
@@ -135,6 +144,27 @@ def _build_pinn(model_type: ModelType, ckpt: dict, hidden: int, depth: int) -> n
             x_min=ckpt["x_min"],
             x_max=ckpt["x_max"],
             X_max=ckpt["X_max"],
+            T=ckpt["T"],
+            r_max=ckpt["r_max"],
+            xi0_max=ckpt["xi0_max"],
+            omega_max=ckpt["omega_max"],
+            kappa_max=ckpt["kappa_max"],
+            call_put=call_put,
+            hidden=hidden,
+            depth=depth,
+            v_max=ckpt.get("v_max", 1.0),
+            kappa_floor=ckpt.get("kappa_floor", 0.25),
+            price_softplus_beta=ckpt.get("price_softplus_beta", 400.0),
+        )
+
+    if model_type == ModelType.BERGOMI2:
+        from pricing.bergomi2_option_pricing import PINN
+
+        return PINN(
+            x_min=ckpt["x_min"],
+            x_max=ckpt["x_max"],
+            X1_max=ckpt["X1_max"],
+            X2_max=ckpt["X2_max"],
             T=ckpt["T"],
             r_max=ckpt["r_max"],
             xi0_max=ckpt["xi0_max"],
@@ -232,6 +262,7 @@ def get_model_label(pinn: nn.Module) -> str:
         ModelType.HD: "Black–Scholes (HD)",
         ModelType.HESTON: "Heston",
         ModelType.BERGOMI: "Bergomi (1-factor)",
+        ModelType.BERGOMI2: "Bergomi (2-factor)",
     }
     return labels[model_type]
 
@@ -245,6 +276,8 @@ def predict_price(pinn: nn.Module, S, K, tau, **kwargs) -> torch.Tensor:
       - hd      : r, sigma
       - heston  : v, r, kappa, theta, sigma, rho, sigma_mode (optional)
       - bergomi : X, r, xi0, omega, kappa, rho, sigma_mode, stationary (optional)
+      - bergomi2: X1, X2, r, xi0, omega1, omega2, kappa1, kappa2, rho1, rho2, rho12,
+                  sigma_mode, stationary (optional)
     """
     model_type = detect_model_type(pinn)
 
@@ -267,6 +300,26 @@ def predict_price(pinn: nn.Module, S, K, tau, **kwargs) -> torch.Tensor:
             omega=kwargs["omega"],
             kappa=kwargs["kappa"],
             rho=kwargs["rho"],
+            sigma_mode=kwargs.get("sigma_mode", "spot_var"),
+            stationary=kwargs.get("stationary", True),
+        )
+
+    if model_type == ModelType.BERGOMI2:
+        return pinn.predict_price(
+            S=S,
+            K=K,
+            X1=kwargs["X1"],
+            X2=kwargs["X2"],
+            tau=tau,
+            r=kwargs["r"],
+            xi0=kwargs["xi0"],
+            omega1=kwargs["omega1"],
+            omega2=kwargs["omega2"],
+            kappa1=kwargs["kappa1"],
+            kappa2=kwargs["kappa2"],
+            rho1=kwargs["rho1"],
+            rho2=kwargs["rho2"],
+            rho12=kwargs["rho12"],
             sigma_mode=kwargs.get("sigma_mode", "spot_var"),
             stationary=kwargs.get("stationary", True),
         )
@@ -298,6 +351,33 @@ def _analytical_price(
     """Ground-truth price for the given model type."""
     model_type = detect_model_type(pinn)
     call_put = getattr(pinn, "call_put", "Call")
+
+    if model_type == ModelType.BERGOMI2:
+        from support_tools.monte_carlo_pricing_tools import Bergomi2_Monte_Carlo
+
+        return Bergomi2_Monte_Carlo(
+            S0=spot,
+            K=K,
+            T=tau,
+            r=params["r"],
+            q=params.get("q", 0.0),
+            xi0=params["xi0"],
+            omega1=params["omega1"],
+            omega2=params["omega2"],
+            kappa1=params["kappa1"],
+            kappa2=params["kappa2"],
+            rho1=params["rho1"],
+            rho2=params["rho2"],
+            rho12=params["rho12"],
+            X1_0=params.get("X1", params.get("X1_0", 0.0)),
+            X2_0=params.get("X2", params.get("X2_0", 0.0)),
+            call_put=call_put,
+            n_paths=int(params.get("n_mc_paths", 50_000)),
+            n_steps=int(params.get("n_mc_steps", 100)),
+            stationary=params.get("stationary", True),
+            seed=params.get("mc_seed", 0),
+            return_stderr=False,
+        )
 
     if model_type == ModelType.BERGOMI:
         from support_tools.monte_carlo_pricing_tools import (
@@ -402,6 +482,34 @@ def get_default_test_params(pinn: nn.Module, metadata: Optional[dict] = None) ->
             "s_step": 2.0,
         }
 
+    if model_type == ModelType.BERGOMI2:
+        return {
+            "X1": 0.0,
+            "X2": 0.0,
+            "r": 0.05,
+            "xi0": 0.04,
+            "omega1": 1.0,
+            "omega2": 0.6,
+            "kappa1": 4.0,
+            "kappa2": 0.8,
+            "rho1": -0.6,
+            "rho2": -0.3,
+            "rho12": 0.2,
+            "sigma_mode": metadata.get("sigma_mode", "spot_var"),
+            "stationary": metadata.get("stationary", True),
+            "K": 100.0,
+            "tau_min": 0.25,
+            "tau_max": min(pinn.T, 2.0),
+            "n_tau": 8,
+            "s_min": 70.0,
+            "s_max": 140.0,
+            "s_step": 10.0,
+            "n_mc_paths": 40_000,
+            "n_mc_steps": 80,
+            "mc_seed": 0,
+            "mc_method": "mc",
+        }
+
     if model_type == ModelType.BERGOMI:
         return {
             "X": 0.0,
@@ -476,7 +584,16 @@ def run_slice_test(
     s_step = params.pop("s_step")
 
     # MC-only kwargs must not be forwarded to predict_price
-    mc_keys = ("n_mc_paths", "n_mc_steps", "mc_seed", "mc_method", "q", "X0")
+    mc_keys = (
+        "n_mc_paths",
+        "n_mc_steps",
+        "mc_seed",
+        "mc_method",
+        "q",
+        "X0",
+        "X1_0",
+        "X2_0",
+    )
     predict_params = {k: v for k, v in params.items() if k not in mc_keys}
 
     model_type = detect_model_type(pinn)

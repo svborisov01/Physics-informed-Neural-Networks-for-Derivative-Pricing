@@ -752,3 +752,162 @@ def Bergomi_QMC_ADD_Greeks(
     # Optional bump check for delta stability at the money (not returned)
     _ = bump_S
     return price, delta, theta
+
+
+# ============================================================
+# 2-factor Bergomi Monte Carlo
+# ============================================================
+
+
+def _v_bergomi2_np(
+    X1,
+    X2,
+    xi0,
+    omega1,
+    omega2,
+    kappa1,
+    kappa2,
+    rho12,
+    t=None,
+    stationary=True,
+    eps=1e-12,
+    v_max=None,
+):
+    """Numpy instantaneous variance under 2-factor Bergomi (flat xi0)."""
+    X1 = np.asarray(X1, dtype=np.float64)
+    X2 = np.asarray(X2, dtype=np.float64)
+    xi0 = max(float(xi0), eps)
+    omega1 = float(omega1)
+    omega2 = float(omega2)
+    kappa1 = max(float(kappa1), max(eps, 1e-3))
+    kappa2 = max(float(kappa2), max(eps, 1e-3))
+    rho12 = float(np.clip(rho12, -0.999, 0.999))
+
+    drive = omega1 * X1 + omega2 * X2
+    if stationary or t is None:
+        compensator = (
+            (omega1 ** 2) / (4.0 * kappa1)
+            + (omega2 ** 2) / (4.0 * kappa2)
+            + (omega1 * omega2 * rho12) / (kappa1 + kappa2)
+        )
+    else:
+        t = np.asarray(t, dtype=np.float64)
+        var1 = (1.0 - np.exp(-2.0 * kappa1 * t)) / (2.0 * kappa1)
+        var2 = (1.0 - np.exp(-2.0 * kappa2 * t)) / (2.0 * kappa2)
+        cov12 = rho12 * (1.0 - np.exp(-(kappa1 + kappa2) * t)) / (kappa1 + kappa2)
+        compensator = 0.5 * (
+            (omega1 ** 2) * var1 + (omega2 ** 2) * var2 + 2.0 * omega1 * omega2 * cov12
+        )
+
+    expo = np.clip(drive - compensator, -20.0, 20.0)
+    v = np.maximum(xi0 * np.exp(expo), eps)
+    if v_max is not None:
+        v = np.minimum(v, float(v_max))
+    return v
+
+
+def Bergomi2_Monte_Carlo(
+    S0,
+    K,
+    T,
+    r,
+    q,
+    xi0,
+    omega1,
+    omega2,
+    kappa1,
+    kappa2,
+    rho1,
+    rho2,
+    rho12,
+    X1_0=0.0,
+    X2_0=0.0,
+    call_put="Call",
+    n_paths=100_000,
+    n_steps=100,
+    stationary=True,
+    seed=None,
+    return_stderr=False,
+):
+    """
+    Monte Carlo pricer for a European option under 2-factor Bergomi.
+
+    Exact OU transitions for (X1, X2) with correlation ρ12; log-Euler for S
+    with spot–factor correlations (ρ1, ρ2).
+    """
+    cp = call_put.lower()
+    if cp not in {"call", "put"}:
+        raise ValueError("call_put must be either 'Call' or 'Put'")
+    if T <= 0.0:
+        intrinsic = max(S0 - K, 0.0) if cp == "call" else max(K - S0, 0.0)
+        return (float(intrinsic), 0.0) if return_stderr else float(intrinsic)
+
+    rng = np.random.default_rng(seed)
+    dt = T / n_steps
+    sqrt_dt = np.sqrt(dt)
+
+    exp_k1 = np.exp(-kappa1 * dt)
+    exp_k2 = np.exp(-kappa2 * dt)
+    ou_std1 = (
+        np.sqrt(max((1.0 - np.exp(-2.0 * kappa1 * dt)) / (2.0 * kappa1), 0.0))
+        if kappa1 > 1e-12
+        else sqrt_dt
+    )
+    ou_std2 = (
+        np.sqrt(max((1.0 - np.exp(-2.0 * kappa2 * dt)) / (2.0 * kappa2), 0.0))
+        if kappa2 > 1e-12
+        else sqrt_dt
+    )
+    # Correlated OU innovations: Z2 = ρ12 Z1 + sqrt(1-ρ12²) Z_perp
+    rho12 = float(np.clip(rho12, -0.999, 0.999))
+    rho12_perp = np.sqrt(max(1.0 - rho12 * rho12, 0.0))
+
+    # Spot Brownian correlated with both factors via Cholesky of corr matrix
+    # Build conditional correlations carefully: generate Z1, Z2 first, then
+    # Z_S = a1 Z1 + a2 Z2 + a_perp Z_perp_S so Corr(ZS,Zi)=ρi.
+    # Solve: a1 + a2 ρ12 = ρ1,  a1 ρ12 + a2 = ρ2
+    # => a1 = (ρ1 - ρ12 ρ2)/(1-ρ12²), a2 = (ρ2 - ρ12 ρ1)/(1-ρ12²)
+    denom = max(1.0 - rho12 * rho12, 1e-12)
+    a1 = (rho1 - rho12 * rho2) / denom
+    a2 = (rho2 - rho12 * rho1) / denom
+    a_perp2 = max(1.0 - a1 * a1 - a2 * a2 - 2.0 * a1 * a2 * rho12, 0.0)
+    a_perp = np.sqrt(a_perp2)
+
+    log_S = np.full(n_paths, np.log(S0), dtype=np.float64)
+    X1 = np.full(n_paths, float(X1_0), dtype=np.float64)
+    X2 = np.full(n_paths, float(X2_0), dtype=np.float64)
+    t = 0.0
+
+    for _ in range(n_steps):
+        v = _v_bergomi2_np(
+            X1,
+            X2,
+            xi0=xi0,
+            omega1=omega1,
+            omega2=omega2,
+            kappa1=kappa1,
+            kappa2=kappa2,
+            rho12=rho12,
+            t=t,
+            stationary=stationary,
+        )
+        sqrt_v = np.sqrt(v)
+
+        z1 = rng.standard_normal(n_paths)
+        z_perp12 = rng.standard_normal(n_paths)
+        z2 = rho12 * z1 + rho12_perp * z_perp12
+        z_perp_S = rng.standard_normal(n_paths)
+        z_S = a1 * z1 + a2 * z2 + a_perp * z_perp_S
+
+        X1 = exp_k1 * X1 + ou_std1 * z1
+        X2 = exp_k2 * X2 + ou_std2 * z2
+        log_S = log_S + (r - q - 0.5 * v) * dt + sqrt_v * sqrt_dt * z_S
+        t += dt
+
+    ST = np.exp(log_S)
+    payoff = np.maximum(ST - K, 0.0) if cp == "call" else np.maximum(K - ST, 0.0)
+    disc = np.exp(-r * T) * payoff
+    price = float(disc.mean())
+    if return_stderr:
+        return price, float(disc.std(ddof=1) / np.sqrt(n_paths))
+    return price

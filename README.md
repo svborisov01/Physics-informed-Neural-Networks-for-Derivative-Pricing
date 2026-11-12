@@ -12,6 +12,7 @@ The network learns normalized option prices \(u = V/K\) in log-moneyness space \
 | `pricing/hd_option_pricing.py` | HD Black–Scholes | \((x, \tau, r, \sigma)\) | Variable \(r\) and \(\sigma\) sampled during training |
 | `pricing/heston_option_pricing.py` | Heston correction | 22 features | Learns correction \(U\); total price \(u = u_{BS} + U\) |
 | `pricing/bergomi_option_pricing.py` | 1-factor Bergomi | 22 features | BS correction with OU factor \(X\); stationary variance by default |
+| `pricing/bergomi2_option_pricing.py` | 2-factor Bergomi | 28 features | Fast+slow OU factors; see `bergomi2/` |
 
 ## Installation
 

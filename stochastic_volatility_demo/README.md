@@ -1,7 +1,7 @@
 # Stochastic volatility demo
 
-Fit four parametric IV models side by side and show **why two Bergomi
-factors** are needed when the surface has a fast short smile **and** a
+Fit four parametric IV models on **real listed option quotes** and show why
+two Bergomi factors help when the surface has a fast short smile **and** a
 slow long skew.
 
 1. Black–Scholes (flat σ)
@@ -9,30 +9,28 @@ slow long skew.
 3. 1-factor Bergomi (**one** OU clock)
 4. **2-factor Bergomi** (fast + slow OU clocks)
 
-Calibration is honest about clock count: 1F/Heston no longer get free
-independent smile decays (that would secretly add extra timescales).
-Residuals are equal-weighted by tenor.
+Calibration is honest about clock count: 1F/Heston share a single decay for
+ATM+skew+smile. Residuals are equal-weighted by tenor.
 
-## IV extraction (live quotes)
+## IV extraction
 
 Yahoo’s `impliedVolatility` is **not** used for fitting. Per-expiry forward
 \(F\) comes from put-call parity; IVs are re-implied from mid (else last)
-with moneyness \(k=\log(K/F)\).
+with moneyness \(k=\log(K/F)\). Wide spreads are dropped.
 
 ## Run
 
 ```bash
 pip install -r requirements.txt
-python stochastic_volatility_demo/run_demo.py              # synthetic (default; clearest 2F demo)
-python stochastic_volatility_demo/run_demo.py synthetic    # same
-python stochastic_volatility_demo/run_demo.py ^SPX         # live SPX strip
-python stochastic_volatility_demo/run_demo.py auto         # live if 2F advantage is clear, else synthetic
+python stochastic_volatility_demo/run_demo.py           # auto: best live 2F strip
+python stochastic_volatility_demo/run_demo.py NVDA      # pin a symbol
+python stochastic_volatility_demo/run_demo.py QQQ
+python stochastic_volatility_demo/run_demo.py ^SPX
 ```
 
-Default is a **designed two-timescale** surface (κ_fast≈18, κ_slow≈0.35).
-On that strip 2F typically recovers both clocks and beats 1F/Heston by
-~10× in RMSE on short *and* long tenors. Live SPX can look flatter; `auto`
-falls back to synthetic when the live joint advantage is weak.
+Default `auto` probes NVDA, QQQ, AAPL, MSFT, …, ^SPX and keeps the live
+strip with the strongest joint short+long 2F advantage (all mid-implied).
+Synthetic is **not** used unless you pass `synthetic` explicitly.
 
 Artifacts in `stochastic_volatility_demo/artifacts/`:
 
@@ -46,5 +44,5 @@ Artifacts in `stochastic_volatility_demo/artifacts/`:
 | `model_iv_surfaces_3d.png` | 3D surfaces for all four models |
 | `model_surfaces_by_tenor.png` | Per-model smile grids |
 | `fit_errors_by_tenor.png` | RMSE by maturity |
-| `fit_errors_by_moneyness.png` | RMSE by moneyness bucket |
-| `fit_report.json` | Params, short/long RMSE, advantage ratios |
+| `fit_report.json` | Params, short/long RMSE, candidate probes |
+| `live_probe.json` | Optional full multi-symbol probe log |

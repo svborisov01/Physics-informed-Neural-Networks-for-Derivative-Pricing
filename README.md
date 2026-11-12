@@ -26,12 +26,12 @@ Plots and reports: `results/<model>/`.
 
 ## Stochastic volatility demo
 
-Fit BS / Heston / 1F / **2F Bergomi** IV surfaces with honest single- vs
-two-clock calibration — see [`stochastic_volatility_demo/`](stochastic_volatility_demo/):
+Fit BS / Heston / 1F / **2F Bergomi** on **live** option IVs with honest
+single- vs two-clock calibration — see [`stochastic_volatility_demo/`](stochastic_volatility_demo/):
 
 ```bash
-python stochastic_volatility_demo/run_demo.py            # synthetic two-timescale (default)
-python stochastic_volatility_demo/run_demo.py ^SPX       # live strip
+python stochastic_volatility_demo/run_demo.py            # auto: best live 2F strip
+python stochastic_volatility_demo/run_demo.py NVDA       # pin a symbol
 ```
 
 ## Layout

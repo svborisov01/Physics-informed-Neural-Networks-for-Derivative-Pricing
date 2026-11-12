@@ -17,8 +17,19 @@ ART = ROOT / "artifacts"
 CACHE_CSV = ART / "market_quotes.csv"
 CACHE_META = ART / "market_meta.json"
 
-# Tried in order; first symbol with enough live tenors wins.
-DEFAULT_CANDIDATES = ("AAPL", "QQQ", "SPY", "^SPX")
+# Live underliers probed for the clearest two-clock (short smile + long skew) strip.
+DEFAULT_CANDIDATES = (
+    "NVDA",
+    "QQQ",
+    "AAPL",
+    "MSFT",
+    "TSLA",
+    "AMZN",
+    "META",
+    "SPY",
+    "^SPX",
+    "IWM",
+)
 
 
 def _spot_from_ticker(ticker) -> float:
@@ -401,18 +412,20 @@ def make_synthetic_surface(seed: int = 0) -> tuple[pd.DataFrame, dict]:
     return df, meta
 
 
-def choose_richest_live(
+def choose_best_live_for_2f(
     candidates: tuple[str, ...] = DEFAULT_CANDIDATES,
     min_tenors: int = 5,
-) -> tuple[pd.DataFrame, dict]:
+    min_mid_frac: float = 0.7,
+) -> tuple[pd.DataFrame, dict, list]:
     """
-    Probe candidate underliers and return the best usable live strip.
+    Probe live underliers and keep the strip with the clearest *real-data*
+    two-factor advantage (joint short+long RMSE ratio vs best single-clock rival).
 
-    Score (higher is better):
-      1. number of tenors
-      2. share of mid-implied IVs (vs last-print fallback)
-      3. quote count before subsampling
+    Returns ``(df, meta, fits)``. Never synthesizes quotes.
     """
+    # Local import avoids a circular dependency at module load.
+    from stochastic_volatility_demo.fit_surfaces import fit_all, two_factor_advantage
+
     attempts = []
     best = None
     for sym in candidates:
@@ -420,40 +433,89 @@ def choose_richest_live(
             df, meta = fetch_yahoo_options(symbol=sym)
             n_ten = len(meta.get("tenors", []))
             n_quotes = int(meta.get("n_quotes", 0))
-            n_before = int(meta.get("n_quotes_before_subsample", n_quotes))
-            if "iv_source" in df.columns and len(df):
-                mid_frac = float((df["iv_source"] == "mid").mean())
-            else:
-                mid_frac = 0.0
-            score = (n_ten, mid_frac, n_before)
+            mid_frac = (
+                float((df["iv_source"] == "mid").mean())
+                if "iv_source" in df.columns and len(df)
+                else 0.0
+            )
+            if n_ten < min_tenors or mid_frac < min_mid_frac:
+                attempts.append(
+                    {
+                        "symbol": sym,
+                        "n_tenors": n_ten,
+                        "n_quotes": n_quotes,
+                        "mid_iv_fraction": mid_frac,
+                        "skipped": True,
+                        "reason": "thin_or_low_mid_frac",
+                    }
+                )
+                print(
+                    f"[fetch] {sym}: skipped (tenors={n_ten}, mid IV={mid_frac:.0%})"
+                )
+                continue
+
+            fits = fit_all(
+                df["k"].to_numpy(float),
+                df["tau"].to_numpy(float),
+                df["iv"].to_numpy(float),
+            )
+            adv = two_factor_advantage(fits)
+            by = {fr.name: fr for fr in fits}
+            # Prefer clear 2F win; break ties with quote depth / mid quality
+            score = (
+                float(adv["joint_score"]),
+                float(adv["rmse_ratio"]),
+                mid_frac,
+                float(n_quotes),
+            )
             attempts.append(
                 {
                     "symbol": sym,
                     "n_tenors": n_ten,
                     "n_quotes": n_quotes,
-                    "n_quotes_before_subsample": n_before,
-                    "n_iv_from_mid": meta.get("n_iv_from_mid"),
-                    "n_iv_from_last": meta.get("n_iv_from_last"),
                     "mid_iv_fraction": mid_frac,
                     "yahoo_iv_mae_vs_ours": meta.get("yahoo_iv_mae_vs_ours"),
+                    "atm_put_call_iv_gap_median": meta.get("atm_put_call_iv_gap_median"),
+                    "rmse_2f": by["2-factor Bergomi"].rmse,
+                    "rmse_1f": by["1-factor Bergomi"].rmse,
+                    "rmse_heston": by["Heston-like"].rmse,
+                    "advantage": adv,
                 }
             )
             print(
-                f"[fetch] {sym}: {n_quotes} quotes, {n_ten} tenors, "
-                f"mid IV={mid_frac:.0%}, "
-                f"Yahoo MAE={meta.get('yahoo_iv_mae_vs_ours')}"
+                f"[fetch] {sym}: n={n_quotes}, tenors={n_ten}, mid={mid_frac:.0%}, "
+                f"2F joint={adv['joint_score']:.2f}× "
+                f"(RMSE 2F={by['2-factor Bergomi'].rmse:.4f} "
+                f"1F={by['1-factor Bergomi'].rmse:.4f})"
             )
-            if n_ten >= min_tenors and (best is None or score > best[0]):
-                best = (score, df, meta)
+            if best is None or score > best[0]:
+                best = (score, df, meta, fits, adv)
         except Exception as exc:
             attempts.append({"symbol": sym, "error": str(exc)})
             print(f"[fetch] {sym} failed: {exc}")
 
     if best is None:
-        raise RuntimeError(f"No live surface with ≥{min_tenors} tenors: {attempts}")
+        raise RuntimeError(
+            f"No usable live mid-implied surface among {candidates}: {attempts}"
+        )
 
-    _, df, meta = best
+    _, df, meta, fits, adv = best
     meta["candidate_attempts"] = attempts
+    meta["selection"] = "live_best_2f_advantage"
+    meta["advantage"] = adv
+    meta["note"] = (
+        f"Selected live {meta.get('symbol')} for clearest two-factor advantage "
+        f"on real mid-implied IVs (joint={adv['joint_score']:.2f}×)."
+    )
+    return df, meta, fits
+
+
+# Back-compat alias
+def choose_richest_live(
+    candidates: tuple[str, ...] = DEFAULT_CANDIDATES,
+    min_tenors: int = 5,
+) -> tuple[pd.DataFrame, dict]:
+    df, meta, _ = choose_best_live_for_2f(candidates=candidates, min_tenors=min_tenors)
     return df, meta
 
 
@@ -463,12 +525,13 @@ def load_or_fetch(
     min_tenors: int = 5,
 ) -> tuple[pd.DataFrame, dict]:
     """
-    Load an IV strip for the demo fit.
+    Load a **real** live IV strip for the demo fit.
 
-    - ``symbol="synthetic"``: two-timescale equity-like surface (clearest 2F demo)
-    - ``symbol=None`` / ``"auto"``: richest live Yahoo strip among AAPL→…→^SPX
+    - ``symbol=None`` / ``"auto"``: probe DEFAULT_CANDIDATES, keep best 2F edge
     - other symbols: that underlier's live chain
-    - live failure / too thin → synthetic fallback
+    - ``symbol="synthetic"``: offline two-timescale surface (explicit opt-in only)
+
+    Raises if live data is requested and unavailable (no silent synthetic swap).
     """
     ART.mkdir(parents=True, exist_ok=True)
     if prefer_cache and CACHE_CSV.exists():
@@ -482,33 +545,13 @@ def load_or_fetch(
         CACHE_META.write_text(json.dumps(meta, indent=2))
         return df, meta
 
-    live_df, live_meta = None, None
-    try:
-        if symbol is None or str(symbol).lower() == "auto":
-            live_df, live_meta = choose_richest_live(min_tenors=min_tenors)
-        else:
-            live_df, live_meta = fetch_yahoo_options(symbol=symbol)
-        live_df.to_csv(ART / "market_quotes_live.csv", index=False)
-        (ART / "market_meta_live.json").write_text(json.dumps(live_meta, indent=2))
-    except Exception as exc:
-        print(f"[fetch] live download failed ({exc})")
-
-    if live_df is not None and len(live_meta.get("tenors", [])) >= min_tenors:
-        df, meta = live_df, live_meta
+    if symbol is None or str(symbol).lower() == "auto":
+        df, meta, _ = choose_best_live_for_2f(min_tenors=min_tenors)
     else:
-        n_ten = len((live_meta or {}).get("tenors", []))
-        print(
-            f"[fetch] live surface has {n_ten} tenor(s); "
-            f"using synthetic two-timescale surface for the demo fit"
-        )
-        df, meta = make_synthetic_surface()
-        if live_meta is not None:
-            meta["live_attempt"] = live_meta
-        meta["note"] = (
-            "Synthetic two-timescale surface used so short smile and long skew "
-            "are both populated; live Yahoo snapshot saved alongside when available."
-        )
+        df, meta = fetch_yahoo_options(symbol=symbol)
 
+    df.to_csv(ART / "market_quotes_live.csv", index=False)
+    (ART / "market_meta_live.json").write_text(json.dumps(meta, indent=2))
     df.to_csv(CACHE_CSV, index=False)
     CACHE_META.write_text(json.dumps(meta, indent=2))
     return df, meta

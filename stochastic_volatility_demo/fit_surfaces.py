@@ -165,7 +165,18 @@ def _hit_bounds(x, lo, hi, names, tol=1e-8):
     return hits
 
 
-def fit_model(name, fn, names, x0, bounds, k, tau, iv, n_starts: int = 8) -> FitResult:
+def fit_model(
+    name,
+    fn,
+    names,
+    x0,
+    bounds,
+    k,
+    tau,
+    iv,
+    n_starts: int = 8,
+    extra_starts: list | None = None,
+) -> FitResult:
     lo, hi = np.asarray(bounds[0], float), np.asarray(bounds[1], float)
     x0 = np.asarray(x0, float)
     rng = np.random.default_rng(0)
@@ -175,6 +186,9 @@ def fit_model(name, fn, names, x0, bounds, k, tau, iv, n_starts: int = 8) -> Fit
         return w * (fn(k, tau, **_pack(names, x)) - iv)
 
     candidates = [x0]
+    if extra_starts:
+        for xs in extra_starts:
+            candidates.append(np.clip(np.asarray(xs, float), lo + 1e-8, hi - 1e-8))
     for _ in range(max(0, n_starts - 1)):
         jitter = x0 + 0.30 * (hi - lo) * rng.normal(size=len(x0))
         candidates.append(np.clip(jitter, lo + 1e-8, hi - 1e-8))
@@ -190,7 +204,9 @@ def fit_model(name, fn, names, x0, bounds, k, tau, iv, n_starts: int = 8) -> Fit
             xtol=1e-12,
             gtol=1e-12,
         )
-        cost = float(np.sum(sol.fun**2))
+        # Rank by unweighted RMSE so a bad local min cannot win on weights alone
+        pred = fn(k, tau, **_pack(names, sol.x))
+        cost = float(np.mean((pred - iv) ** 2))
         if best is None or cost < best[0]:
             best = (cost, sol)
 
@@ -241,7 +257,7 @@ def fit_all(k, tau, iv) -> list[FitResult]:
             [v0, v0, 2.0, -0.5, 1.5],
             (
                 [0.002, 0.002, 0.05, -4.0, 0.01],
-                [0.40, 0.40, 25.0, 0.5, 12.0],
+                [0.80, 0.80, 25.0, 0.5, 12.0],
             ),
             k,
             tau,
@@ -251,10 +267,10 @@ def fit_all(k, tau, iv) -> list[FitResult]:
             "1-factor Bergomi",
             bergomi1_like_iv,
             ["xi0", "kappa", "atm0", "skew0", "smile0"],
-            [v0, 2.0, 0.02, -0.5, 1.5],
+            [v0, 2.0, 0.05, -0.5, 1.5],
             (
-                [0.002, 0.05, -0.20, -4.0, 0.01],
-                [0.40, 25.0, 0.30, 0.5, 12.0],
+                [0.002, 0.05, -0.30, -4.0, 0.01],
+                [0.80, 25.0, 0.60, 0.5, 12.0],
             ),
             k,
             tau,
@@ -274,14 +290,22 @@ def fit_all(k, tau, iv) -> list[FitResult]:
                 "smile1",
                 "smile2",
             ],
-            [v0, 10.0, 0.4, 0.04, 0.01, -0.7, -0.25, 2.0, 0.3],
+            [v0, 10.0, 0.4, 0.08, 0.02, -0.7, -0.25, 2.0, 0.3],
             (
-                [0.002, 1.5, 0.05, -0.25, -0.20, -5.0, -3.0, 0.01, 0.0],
-                [0.40, 40.0, 3.0, 0.35, 0.30, 0.5, 0.5, 12.0, 4.0],
+                [0.002, 1.5, 0.05, -0.30, -0.25, -5.0, -3.0, 0.0, 0.0],
+                [0.80, 40.0, 4.0, 0.60, 0.50, 0.5, 0.5, 12.0, 4.0],
             ),
             k,
             tau,
             iv,
+            n_starts=10,
+            extra_starts=[
+                # Fast smile + slow skew seeds (typical equity two-clock shape)
+                [v0, 14.0, 0.5, 0.15, 0.05, -0.4, -0.35, 2.5, 0.4],
+                [v0, 8.0, 1.5, 0.25, 0.08, -0.2, -0.45, 1.5, 0.6],
+                [v0, 20.0, 2.0, 0.35, 0.10, 0.1, -0.50, 1.2, 0.8],
+                [v0, 12.0, 0.8, 0.20, 0.04, -0.6, -0.25, 3.0, 0.3],
+            ],
         ),
     ]
 

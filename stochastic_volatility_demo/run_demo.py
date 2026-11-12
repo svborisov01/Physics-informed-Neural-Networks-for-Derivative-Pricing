@@ -26,7 +26,7 @@ ROOT = Path(__file__).resolve().parent
 if str(ROOT.parent) not in sys.path:
     sys.path.insert(0, str(ROOT.parent))
 
-from stochastic_volatility_demo.fetch_market import load_or_fetch, make_synthetic_surface
+from stochastic_volatility_demo.fetch_market import choose_best_live_for_2f, load_or_fetch
 from stochastic_volatility_demo.fit_surfaces import (
     MODEL_FN,
     fit_all,
@@ -339,7 +339,7 @@ def plot_errors_by_moneyness(fits, path: Path):
     plt.close(fig)
 
 
-def plot_short_vs_long_advantage(fits, path: Path):
+def plot_short_vs_long_advantage(fits, path: Path, symbol: str = ""):
     """Headline comparison: short-tenor RMSE vs long-tenor RMSE."""
     fig, axes = plt.subplots(1, 2, figsize=(11.0, 4.6), dpi=150)
 
@@ -363,7 +363,6 @@ def plot_short_vs_long_advantage(fits, path: Path):
     axes[1].set_title("Long tenors (τ > median)")
     axes[1].grid(True, axis="y", alpha=0.3)
 
-    # Annotate 2F
     for ax, vals in ((axes[0], short), (axes[1], long)):
         i2 = names.index("2-factor Bergomi")
         ax.annotate(
@@ -377,8 +376,9 @@ def plot_short_vs_long_advantage(fits, path: Path):
             fontweight="bold",
         )
 
+    tag = f" — live {symbol}" if symbol else ""
     fig.suptitle(
-        "Two-factor advantage: lowest error on the short end *and* the long end",
+        f"Two-factor advantage{tag}: lowest error short *and* long",
         y=1.02,
     )
     fig.tight_layout()
@@ -429,13 +429,16 @@ def plot_residual_heatmaps(df: pd.DataFrame, fits, path: Path):
     plt.close(fig)
 
 
-def plot_short_long_smile_contrast(df: pd.DataFrame, fits, path: Path):
+def plot_short_long_smile_contrast(
+    df: pd.DataFrame, fits, path: Path, symbol: str = ""
+):
     """One short + one long smile: the visual proof of the two-clock need."""
     taus = _select_tenors(df["tau"].to_numpy(), n=2)
     if len(taus) < 2:
         taus = [float(df["tau"].min()), float(df["tau"].max())]
     tau_s, tau_l = taus[0], taus[-1]
     k_line = np.linspace(df["k"].min(), df["k"].max(), 160)
+    tag = f" ({symbol})" if symbol else ""
 
     fig, axes = plt.subplots(1, 2, figsize=(11.2, 4.6), dpi=150)
     for ax, tau, title in (
@@ -462,7 +465,7 @@ def plot_short_long_smile_contrast(df: pd.DataFrame, fits, path: Path):
         ax.grid(True, alpha=0.3)
         ax.legend(frameon=False, fontsize=8)
     fig.suptitle(
-        "Why two factors: 1F/Heston miss one end; 2F matches both",
+        f"Live{tag}: 1F/Heston miss one end; 2F matches both",
         y=1.02,
     )
     fig.tight_layout()
@@ -470,66 +473,19 @@ def plot_short_long_smile_contrast(df: pd.DataFrame, fits, path: Path):
     plt.close(fig)
 
 
-def _choose_surface(symbol: str | None):
-    """
-    Prefer a surface that visibly needs two clocks.
-
-    - explicit ``synthetic`` / live symbol → that surface
-    - default / ``auto`` → try live; if 2F joint advantage is weak, use synthetic
-    """
-    if symbol is not None and str(symbol).lower() in {"synthetic", "synth", "demo"}:
-        return load_or_fetch(symbol="synthetic")
-
-    if symbol is not None and str(symbol).lower() not in {"auto", "none", ""}:
-        return load_or_fetch(symbol=symbol)
-
-    # auto / default: pick clearest advantage
-    live_df, live_meta = None, None
-    try:
-        live_df, live_meta = load_or_fetch(symbol="^SPX")
-        fits_live = fit_all(
-            live_df["k"].to_numpy(float),
-            live_df["tau"].to_numpy(float),
-            live_df["iv"].to_numpy(float),
-        )
-        adv = two_factor_advantage(fits_live)
-        print(
-            f"[select] live ^SPX 2F joint_score={adv['joint_score']:.2f} "
-            f"(rmse_ratio={adv['rmse_ratio']:.2f})"
-        )
-        if adv["joint_score"] >= 1.35 and adv["rmse_ratio"] >= 1.25:
-            live_meta["selection"] = "live_clear_2f_advantage"
-            live_meta["advantage"] = adv
-            return live_df, live_meta, fits_live
-        print(
-            "[select] live surface does not expose a clear two-clock conflict; "
-            "using synthetic two-timescale surface for the demo plots"
-        )
-    except Exception as exc:
-        print(f"[select] live probe failed ({exc}); using synthetic")
-
-    df, meta = make_synthetic_surface()
-    if live_meta is not None:
-        meta["live_probe"] = {
-            "symbol": live_meta.get("symbol"),
-            "n_quotes": live_meta.get("n_quotes"),
-            "advantage": live_meta.get("advantage"),
-        }
-    meta["selection"] = "synthetic_for_clear_2f_advantage"
-    ART.mkdir(parents=True, exist_ok=True)
-    df.to_csv(ART / "market_quotes.csv", index=False)
-    (ART / "market_meta.json").write_text(json.dumps(meta, indent=2))
-    return df, meta, None
-
-
-def main(symbol: str | None = "synthetic"):
+def main(symbol: str | None = "auto"):
+    """Default ``auto``: probe live underliers and keep the best real 2F strip."""
     ART.mkdir(parents=True, exist_ok=True)
     label = symbol if symbol is not None else "auto"
     print(f"Building option surface for {label}…")
 
     pre_fits = None
     if symbol is None or str(symbol).lower() in {"auto", "none", ""}:
-        df, meta, pre_fits = _choose_surface(None)
+        df, meta, pre_fits = choose_best_live_for_2f()
+        df.to_csv(ART / "market_quotes.csv", index=False)
+        df.to_csv(ART / "market_quotes_live.csv", index=False)
+        (ART / "market_meta.json").write_text(json.dumps(meta, indent=2))
+        (ART / "market_meta_live.json").write_text(json.dumps(meta, indent=2))
     else:
         df, meta = load_or_fetch(symbol=symbol)
         pre_fits = None
@@ -551,6 +507,7 @@ def main(symbol: str | None = "synthetic"):
     fits = pre_fits if pre_fits is not None else fit_all(k, tau, iv)
     adv = two_factor_advantage(fits)
 
+    sym_tag = str(meta.get("symbol", ""))
     plot_market_surface(df, ART / "market_iv_surface.png")
     plot_smile_fits(df, fits, ART / "model_fits_smiles.png")
     plot_tenor_fits(df, fits, ART / "model_fits_tenors.png")
@@ -558,13 +515,16 @@ def main(symbol: str | None = "synthetic"):
     plot_surface_slices_grid(df, fits, ART / "model_surfaces_by_tenor.png")
     plot_errors_by_tenor(fits, ART / "fit_errors_by_tenor.png")
     plot_errors_by_moneyness(fits, ART / "fit_errors_by_moneyness.png")
-    plot_short_vs_long_advantage(fits, ART / "fit_short_vs_long.png")
+    plot_short_vs_long_advantage(fits, ART / "fit_short_vs_long.png", symbol=sym_tag)
     plot_residual_heatmaps(df, fits, ART / "model_residuals.png")
-    plot_short_long_smile_contrast(df, fits, ART / "model_short_long_contrast.png")
+    plot_short_long_smile_contrast(
+        df, fits, ART / "model_short_long_contrast.png", symbol=sym_tag
+    )
 
     report = {
         "market": meta,
         "advantage": adv,
+        "data": "live_yahoo_mid_implied",
         "models": [
             {
                 "name": fr.name,
@@ -605,7 +565,7 @@ def main(symbol: str | None = "synthetic"):
 
 
 if __name__ == "__main__":
-    # Default: synthetic two-timescale surface (clearest 2F demo).
-    # Also: ^SPX, AAPL, auto, synthetic.
-    sym = sys.argv[1] if len(sys.argv) > 1 else "synthetic"
+    # Default: auto-pick the live underlier with the clearest 2F advantage.
+    # Also: NVDA, QQQ, AAPL, ^SPX, or synthetic (explicit offline only).
+    sym = sys.argv[1] if len(sys.argv) > 1 else "auto"
     main(sym)

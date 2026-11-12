@@ -1,0 +1,30 @@
+Features (28): ['x_norm', 'X1_norm', 'X2_norm', 'tau_norm', 'r_norm', 'xi0_norm', 'omega1_norm', 'omega2_norm', 'kappa1_norm', 'kappa2_norm', 'rho1', 'rho2', 'rho12', 'tau_sq', 'tau_sin', 'tau_cos', 'log_v_drive_norm', 'mr_fast', 'mr_slow', 'x_sq', 'abs_x', 'X1_sq', 'X2_sq', 'x_tau', 'x_X1', 'x_X2', 'X1_X2', 'cp_feat']
+Params: 30,817
+Epoch      1 | Time:       0.11s | LR: 1.000e-04 | λ_pde=0.50 | Total: 8.724755e-04 | PDE: 8.672385e-04 | Term: 4.709428e-06 | Bnd: 5.276135e-07 | Grad: 9.718e-04 | Best: 9.070244e-04 @ 1
+Epoch     50 | Time:       3.67s | LR: 9.847e-05 | λ_pde=0.54 | Total: 7.632462e-04 | PDE: 7.606067e-04 | Term: 1.927008e-06 | Bnd: 7.124895e-07 | Grad: 2.249e-04 | Best: 6.395483e-04 @ 44
+Epoch    100 | Time:       7.24s | LR: 9.397e-05 | λ_pde=0.58 | Total: 6.036239e-04 | PDE: 5.974910e-04 | Term: 5.438704e-06 | Bnd: 6.941516e-07 | Grad: 3.448e-04 | Best: 6.288076e-04 @ 88
+Epoch    150 | Time:      10.91s | LR: 8.682e-05 | λ_pde=0.62 | Total: 5.943322e-04 | PDE: 5.869780e-04 | Term: 6.433764e-06 | Bnd: 9.204358e-07 | Grad: 1.037e-03 | Best: 5.356298e-04 @ 141
+Epoch    200 | Time:      14.61s | LR: 7.750e-05 | λ_pde=0.67 | Total: 5.689258e-04 | PDE: 5.573726e-04 | Term: 1.062076e-05 | Bnd: 9.324332e-07 | Grad: 1.553e-03 | Best: 5.356298e-04 @ 141
+Epoch    250 | Time:      18.54s | LR: 6.665e-05 | λ_pde=0.71 | Total: 5.401782e-04 | PDE: 5.261778e-04 | Term: 1.299214e-05 | Bnd: 1.008226e-06 | Grad: 1.935e-03 | Best: 5.273432e-04 @ 236
+Epoch    300 | Time:      22.75s | LR: 5.500e-05 | λ_pde=0.75 | Total: 5.938915e-04 | PDE: 5.730774e-04 | Term: 1.948788e-05 | Bnd: 1.326234e-06 | Grad: 2.043e-03 | Best: 5.273432e-04 @ 236
+Epoch    350 | Time:      27.10s | LR: 4.335e-05 | λ_pde=0.79 | Total: 5.705320e-04 | PDE: 5.468026e-04 | Term: 2.218499e-05 | Bnd: 1.544395e-06 | Grad: 1.315e-03 | Best: 5.273432e-04 @ 236
+Epoch    400 | Time:      31.51s | LR: 3.250e-05 | λ_pde=0.83 | Total: 5.879890e-04 | PDE: 5.595437e-04 | Term: 2.691551e-05 | Bnd: 1.529754e-06 | Grad: 7.888e-04 | Best: 5.273432e-04 @ 236
+Epoch    450 | Time:      35.89s | LR: 2.318e-05 | λ_pde=0.87 | Total: 5.398903e-04 | PDE: 5.113526e-04 | Term: 2.671861e-05 | Bnd: 1.819113e-06 | Grad: 1.846e-03 | Best: 5.273432e-04 @ 236
+Epoch    500 | Time:      40.02s | LR: 1.603e-05 | λ_pde=0.92 | Total: 6.286734e-04 | PDE: 6.005041e-04 | Term: 2.635758e-05 | Bnd: 1.811742e-06 | Grad: 1.696e-03 | Best: 5.273432e-04 @ 236
+Epoch    550 | Time:      44.10s | LR: 1.153e-05 | λ_pde=0.96 | Total: 6.356230e-04 | PDE: 6.073781e-04 | Term: 2.661652e-05 | Bnd: 1.628424e-06 | Grad: 9.974e-04 | Best: 5.273432e-04 @ 236
+Epoch    600 | Time:      48.12s | LR: 1.000e-04 | λ_pde=1.00 | Total: 1.062984e-03 | PDE: 1.035563e-03 | Term: 2.596063e-05 | Bnd: 1.460345e-06 | Grad: 1.050e-01 | Best: 5.273432e-04 @ 236
+Epoch    650 | Time:      52.19s | LR: 9.847e-05 | λ_pde=1.00 | Total: 5.824462e-04 | PDE: 5.052013e-04 | Term: 7.550342e-05 | Bnd: 1.741457e-06 | Grad: 2.686e-03 | Best: 5.273432e-04 @ 236
+Epoch    700 | Time:      56.23s | LR: 9.397e-05 | λ_pde=1.00 | Total: 5.295694e-04 | PDE: 4.946350e-04 | Term: 3.378761e-05 | Bnd: 1.146817e-06 | Grad: 1.308e-03 | Best: 5.273432e-04 @ 236
+Epoch    750 | Time:      60.39s | LR: 8.682e-05 | λ_pde=1.00 | Total: 5.313918e-04 | PDE: 5.060877e-04 | Term: 2.400165e-05 | Bnd: 1.302482e-06 | Grad: 1.436e-03 | Best: 5.273432e-04 @ 236
+Epoch    800 | Time:      64.34s | LR: 7.750e-05 | λ_pde=1.00 | Total: 4.867529e-04 | PDE: 4.713449e-04 | Term: 1.413460e-05 | Bnd: 1.273481e-06 | Grad: 1.149e-03 | Best: 5.273432e-04 @ 236
+Epoch    850 | Time:      68.45s | LR: 6.665e-05 | λ_pde=1.00 | Total: 5.807152e-04 | PDE: 5.665322e-04 | Term: 1.281509e-05 | Bnd: 1.367935e-06 | Grad: 7.453e-03 | Best: 5.273432e-04 @ 236
+Epoch    900 | Time:      72.65s | LR: 5.500e-05 | λ_pde=1.00 | Total: 5.620136e-04 | PDE: 5.482230e-04 | Term: 1.230281e-05 | Bnd: 1.487853e-06 | Grad: 2.548e-03 | Best: 5.273432e-04 @ 236
+Epoch    950 | Time:      76.87s | LR: 4.335e-05 | λ_pde=1.00 | Total: 5.337728e-04 | PDE: 5.197278e-04 | Term: 1.257486e-05 | Bnd: 1.470158e-06 | Grad: 4.503e-04 | Best: 5.218562e-04 @ 928
+Epoch   1000 | Time:      81.15s | LR: 3.250e-05 | λ_pde=1.00 | Total: 5.209701e-04 | PDE: 5.059887e-04 | Term: 1.313420e-05 | Bnd: 1.847191e-06 | Grad: 2.129e-03 | Best: 4.815840e-04 @ 964
+Epoch   1050 | Time:      85.45s | LR: 2.318e-05 | λ_pde=1.00 | Total: 4.790067e-04 | PDE: 4.499405e-04 | Term: 2.748459e-05 | Bnd: 1.581585e-06 | Grad: 1.624e-03 | Best: 4.815840e-04 @ 964
+Epoch   1100 | Time:      89.53s | LR: 1.603e-05 | λ_pde=1.00 | Total: 6.083850e-04 | PDE: 5.755023e-04 | Term: 3.112899e-05 | Bnd: 1.753775e-06 | Grad: 9.722e-04 | Best: 4.815840e-04 @ 964
+Epoch   1150 | Time:      93.84s | LR: 1.153e-05 | λ_pde=1.00 | Total: 5.316983e-04 | PDE: 5.037349e-04 | Term: 2.644505e-05 | Bnd: 1.518437e-06 | Grad: 6.591e-04 | Best: 4.815840e-04 @ 964
+Epoch   1200 | Time:      98.01s | LR: 1.000e-04 | λ_pde=1.00 | Total: 5.370941e-04 | PDE: 5.114233e-04 | Term: 2.427533e-05 | Bnd: 1.395459e-06 | Grad: 1.407e-03 | Best: 4.815840e-04 @ 964
+Best loss 4.815840e-04 @ epoch 964
+Checkpoint: trained_models/bergomi2.pt
+History: bergomi2/artifacts/training_history.json

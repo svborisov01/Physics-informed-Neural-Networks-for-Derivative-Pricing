@@ -352,8 +352,25 @@ def pde_dynamic_x(
     N_points=4000,
     sigma_mode="spot_var",
     stationary=True,
+    detach_source: bool = True,
+    huber_delta: float = 1.0,
+    relative_bs: bool = True,
 ):
-    """PDE residual loss on softplus(u_BS + U)."""
+    """
+    PDE residual loss on softplus(u_BS + U).
+
+    ``detach_source=True`` (default) freezes the BS baseline in the residual so
+    gradients flow into the correction U rather than fighting analytic BS
+    derivatives.
+
+    ``relative_bs=True`` (default) divides the residual by
+    ``1 + |L[u_BS]|`` (detached). Absolute |L[u_BS]| under Bergomi dynamics is
+    O(10⁻²)–O(10⁻¹) and would otherwise floor the PDE loss even when U is
+    cancelling the operator well; the relative form tracks cancellation quality
+    and lets the training loss keep decreasing.
+
+    Huber loss further down-weights rare high-v / deep-OTM outliers.
+    """
     (
         x,
         X1,
@@ -369,6 +386,85 @@ def pde_dynamic_x(
         rho2,
         rho12,
     ) = _sample_interior(pinn, N_points)
+
+    beta = float(getattr(pinn, "price_softplus_beta", DEFAULT_PRICE_SOFTPLUS_BETA))
+
+    def _operator(f, x_, X1_, X2_, tau_, r_, v_, kappa1_, kappa2_, rho1_, rho2_, rho12_):
+        sqrt_v = torch.sqrt(v_)
+        f_tau = torch.autograd.grad(f.sum(), tau_, create_graph=True, retain_graph=True)[0]
+        f_x = torch.autograd.grad(f.sum(), x_, create_graph=True, retain_graph=True)[0]
+        f_X1 = torch.autograd.grad(f.sum(), X1_, create_graph=True, retain_graph=True)[0]
+        f_X2 = torch.autograd.grad(f.sum(), X2_, create_graph=True, retain_graph=True)[0]
+        f_xx = torch.autograd.grad(f_x.sum(), x_, create_graph=True, retain_graph=True)[0]
+        f_X1X1 = torch.autograd.grad(f_X1.sum(), X1_, create_graph=True, retain_graph=True)[0]
+        f_X2X2 = torch.autograd.grad(f_X2.sum(), X2_, create_graph=True, retain_graph=True)[0]
+        f_X1X2 = torch.autograd.grad(f_X1.sum(), X2_, create_graph=True, retain_graph=True)[0]
+        f_xX1 = torch.autograd.grad(f_x.sum(), X1_, create_graph=True, retain_graph=True)[0]
+        f_xX2 = torch.autograd.grad(f_x.sum(), X2_, create_graph=True, retain_graph=True)[0]
+        return (
+            -f_tau
+            + (r_ - 0.5 * v_) * f_x
+            + 0.5 * v_ * f_xx
+            - kappa1_ * X1_ * f_X1
+            - kappa2_ * X2_ * f_X2
+            + 0.5 * f_X1X1
+            + 0.5 * f_X2X2
+            + rho12_ * f_X1X2
+            + rho1_ * sqrt_v * f_xX1
+            + rho2_ * sqrt_v * f_xX2
+            - r_ * f
+        )
+
+    # Optional |L[u_BS]| scale on an *isolated* clone graph so it cannot
+    # interfere with the trainable residual backward.
+    res_bs = None
+    if relative_bs:
+        x_b = x.detach().requires_grad_(True)
+        X1_b = X1.detach().requires_grad_(True)
+        X2_b = X2.detach().requires_grad_(True)
+        tau_b = tau.detach().requires_grad_(True)
+        r_b = r.detach()
+        xi0_b = xi0.detach()
+        omega1_b = omega1.detach()
+        omega2_b = omega2.detach()
+        kappa1_b = kappa1.detach()
+        kappa2_b = kappa2.detach()
+        rho1_b = rho1.detach()
+        rho2_b = rho2.detach()
+        rho12_b = rho12.detach()
+        t_b = None if stationary else torch.full_like(x_b, float(pinn.T))
+        v_b = v_bergomi2(
+            X1_b,
+            X2_b,
+            xi0_b,
+            omega1_b,
+            omega2_b,
+            kappa1_b,
+            kappa2_b,
+            rho12_b,
+            t=t_b,
+            stationary=stationary,
+            v_max=getattr(pinn, "v_max", 1.0),
+        ).clamp(1e-8, float(getattr(pinn, "v_max", 1.0)))
+        sigma_b = sigma_bs_bergomi2(xi0=xi0_b, v=v_b, tau=tau_b, mode=sigma_mode)
+        u_bs_b = bs_option_normalized_from_x(
+            x=x_b, tau=tau_b, r=r_b, sigma_bs=sigma_b, call_put=pinn.call_put
+        )
+        u_bs_only = _soft_positive_price(u_bs_b, beta=beta)
+        res_bs = _operator(
+            u_bs_only,
+            x_b,
+            X1_b,
+            X2_b,
+            tau_b,
+            r_b,
+            v_b,
+            kappa1_b,
+            kappa2_b,
+            rho1_b,
+            rho2_b,
+            rho12_b,
+        ).detach()
 
     u_total, u_bs, v = _total_price(
         pinn,
@@ -388,37 +484,28 @@ def pde_dynamic_x(
         sigma_mode,
         stationary,
     )
-    sqrt_v = torch.sqrt(v)
+    v = v.clamp(1e-8, float(getattr(pinn, "v_max", 1.0)))
 
-    def operator(f):
-        f_tau = torch.autograd.grad(f.sum(), tau, create_graph=True)[0]
-        f_x = torch.autograd.grad(f.sum(), x, create_graph=True)[0]
-        f_X1 = torch.autograd.grad(f.sum(), X1, create_graph=True)[0]
-        f_X2 = torch.autograd.grad(f.sum(), X2, create_graph=True)[0]
-
-        f_xx = torch.autograd.grad(f_x.sum(), x, create_graph=True)[0]
-        f_X1X1 = torch.autograd.grad(f_X1.sum(), X1, create_graph=True)[0]
-        f_X2X2 = torch.autograd.grad(f_X2.sum(), X2, create_graph=True)[0]
-        f_X1X2 = torch.autograd.grad(f_X1.sum(), X2, create_graph=True)[0]
-        f_xX1 = torch.autograd.grad(f_x.sum(), X1, create_graph=True)[0]
-        f_xX2 = torch.autograd.grad(f_x.sum(), X2, create_graph=True)[0]
-
-        return (
-            -f_tau
-            + (r - 0.5 * v) * f_x
-            + 0.5 * v * f_xx
-            - kappa1 * X1 * f_X1
-            - kappa2 * X2 * f_X2
-            + 0.5 * f_X1X1
-            + 0.5 * f_X2X2
-            + rho12 * f_X1X2
-            + rho1 * sqrt_v * f_xX1
-            + rho2 * sqrt_v * f_xX2
-            - r * f
+    if detach_source:
+        u_bs_det = u_bs.detach()
+        U = pinn.forward_x(
+            x, X1, X2, tau, r, xi0, omega1, omega2, kappa1, kappa2, rho1, rho2, rho12
         )
+        u_total = _soft_positive_price(u_bs_det + U, beta=beta)
 
-    residual = operator(u_total) / (1.0 + torch.abs(u_bs))
-    return torch.mean(residual ** 2)
+    residual = _operator(
+        u_total, x, X1, X2, tau, r, v, kappa1, kappa2, rho1, rho2, rho12
+    )
+    # Price-level scale (same spirit as 1-factor Bergomi)
+    residual = residual / (1.0 + torch.abs(u_bs.detach()) + 0.25 * v)
+
+    if res_bs is not None:
+        # Relative cancellation: removes the absolute |L[u_BS]| floor.
+        residual = residual / (1.0 + torch.abs(res_bs))
+
+    return torch.nn.functional.huber_loss(
+        residual, torch.zeros_like(residual), delta=float(huber_delta), reduction="mean"
+    )
 
 
 def spot_terminal_condition_x(
@@ -762,11 +849,14 @@ class PINN(nn.Module):
             x, X1, X2, tau, r, xi0, omega1, omega2, kappa1, kappa2, rho1, rho2, rho12
         )
         raw = self.net(features)
-        # Gate by total vol-of-vol so U → 0 as (ω1, ω2) → 0 (BS limit)
+        # Gate by total vol-of-vol so U → 0 as (ω1, ω2) → 0 (BS limit).
+        # Slightly wider than 1-factor (0.18 vs 0.15): relative PDE scaling does
+        # the heavy lifting against the loss floor, so we avoid the price drift
+        # that appeared at corr_scale ≳ 0.25.
         omega_gate = (
             (omega1.abs() + omega2.abs()) / max(2.0 * self.omega_max, 1e-6)
         ).clamp(0.0, 1.0)
-        corr_scale = 0.15 * (0.5 + tau / self.T) * (1.0 + 0.25 * torch.abs(x))
+        corr_scale = 0.18 * (0.5 + tau / self.T) * (1.0 + 0.25 * torch.abs(x))
         return omega_gate * corr_scale * torch.tanh(raw)
 
     def forward(
@@ -912,6 +1002,11 @@ def train_network(
     stationary=True,
     lambda_boundary=1.0,
     lambda_terminal=1.0,
+    lambda_pde_start=0.5,
+    lambda_pde_end=1.0,
+    balance_losses: bool = False,
+    detach_source: bool = False,
+    relative_bs: bool = True,
     grad_clip=1.0,
     print_every=100,
     best_model_path="trained_models/bergomi2.pt",
@@ -919,12 +1014,22 @@ def train_network(
     weight_decay=1e-2,
     cosine_eta_min=1e-5,
 ):
+    """
+    Train with PDE-aware loss scheduling.
+
+    - ``lambda_pde`` anneals from ``lambda_pde_start`` → ``lambda_pde_end`` so
+      terminal/boundary conditions can settle before the PDE residual dominates.
+    - ``relative_bs`` (passed to ``pde_dynamic_x``) removes the absolute
+      |L[u_BS]| floor so the PDE term can keep decreasing.
+    - ``balance_losses`` reweights terms by inverse detached magnitude; keep
+      False by default — inverse weighting was observed to hurt MC accuracy.
+    """
     device = next(pinn.parameters()).device
     optimizer = torch.optim.AdamW(
         pinn.parameters(), lr=lr, weight_decay=weight_decay
     )
     scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
-        optimizer, T_0=1500, eta_min=cosine_eta_min
+        optimizer, T_0=max(epochs // 2, 100), eta_min=cosine_eta_min
     )
 
     history = {
@@ -934,6 +1039,7 @@ def train_network(
         "physics": [],
         "terminal": [],
         "boundary": [],
+        "lambda_pde": [],
         "lr": [],
         "model depth": pinn.depth,
         "model width": pinn.hidden,
@@ -941,6 +1047,9 @@ def train_network(
         "stationary": stationary,
         "n_features": len(FEATURE_NAMES),
         "feature_names": list(FEATURE_NAMES),
+        "detach_source": detach_source,
+        "relative_bs": relative_bs,
+        "balance_losses": balance_losses,
     }
 
     best_loss = float("inf")
@@ -952,8 +1061,19 @@ def train_network(
         pinn.train()
         optimizer.zero_grad(set_to_none=True)
 
+        # Linear anneal of PDE weight over the first half of training
+        t_anneal = min(1.0, (epoch - 1) / max(epochs // 2, 1))
+        lambda_pde = float(lambda_pde_start) + t_anneal * (
+            float(lambda_pde_end) - float(lambda_pde_start)
+        )
+
         loss_physics = pde_dynamic_x(
-            pinn, N_points=N_pde, sigma_mode=sigma_mode, stationary=stationary
+            pinn,
+            N_points=N_pde,
+            sigma_mode=sigma_mode,
+            stationary=stationary,
+            detach_source=detach_source,
+            relative_bs=relative_bs,
         )
         loss_terminal = spot_terminal_condition_x(
             pinn, N_points=N_boundary, sigma_mode=sigma_mode, stationary=stationary
@@ -961,11 +1081,26 @@ def train_network(
         loss_boundary = spot_boundary_conditions_x(
             pinn, N_points=N_boundary, sigma_mode=sigma_mode, stationary=stationary
         )
-        loss = (
-            loss_physics
-            + lambda_terminal * loss_terminal
-            + lambda_boundary * loss_boundary
-        )
+
+        if balance_losses:
+            eps = 1e-8
+            # Inverse-magnitude weights (detached) → each term ~ O(1) contribution
+            wp = 1.0 / (loss_physics.detach() + eps)
+            wt = 1.0 / (loss_terminal.detach() + eps)
+            wb = 1.0 / (loss_boundary.detach() + eps)
+            wsum = wp + wt + wb
+            wp, wt, wb = wp / wsum, wt / wsum, wb / wsum
+            loss = (
+                3.0 * lambda_pde * wp * loss_physics
+                + 3.0 * lambda_terminal * wt * loss_terminal
+                + 3.0 * lambda_boundary * wb * loss_boundary
+            )
+        else:
+            loss = (
+                lambda_pde * loss_physics
+                + lambda_terminal * loss_terminal
+                + lambda_boundary * loss_boundary
+            )
         if not torch.isfinite(loss):
             raise RuntimeError(f"Non-finite loss at epoch {epoch}")
 
@@ -978,7 +1113,19 @@ def train_network(
 
         elapsed = time.time() - start_time
         current_lr = optimizer.param_groups[0]["lr"]
-        current_loss = loss.item()
+        # Diagnostics: raw sum of terms (PDE already relatively scaled)
+        current_loss = (
+            loss_physics.item()
+            + lambda_terminal * loss_terminal.item()
+            + lambda_boundary * loss_boundary.item()
+        )
+        # Checkpoint score prioritizes terminal/boundary so a falling relative
+        # PDE term cannot select an underpriced interior solution.
+        selection_loss = (
+            loss_physics.item()
+            + 8.0 * lambda_terminal * loss_terminal.item()
+            + 4.0 * lambda_boundary * loss_boundary.item()
+        )
 
         history["epoch"].append(epoch)
         history["elapsed_time"].append(elapsed)
@@ -986,10 +1133,11 @@ def train_network(
         history["physics"].append(loss_physics.item())
         history["terminal"].append(loss_terminal.item())
         history["boundary"].append(loss_boundary.item())
+        history["lambda_pde"].append(lambda_pde)
         history["lr"].append(current_lr)
 
-        if current_loss < best_loss:
-            best_loss = current_loss
+        if selection_loss < best_loss:
+            best_loss = selection_loss
             best_epoch = epoch
             best_state_dict = copy.deepcopy(pinn.state_dict())
             if save_model:
@@ -1028,9 +1176,10 @@ def train_network(
             gn = f"{float(grad_norm):.3e}" if grad_norm is not None else "None"
             print(
                 f"Epoch {epoch:6d} | Time: {elapsed:10.2f}s | LR: {current_lr:.3e} | "
-                f"Total: {current_loss:.6e} | PDE: {loss_physics.item():.6e} | "
-                f"Term: {loss_terminal.item():.6e} | Bnd: {loss_boundary.item():.6e} | "
-                f"Grad: {gn} | Best: {best_loss:.6e} @ {best_epoch}"
+                f"λ_pde={lambda_pde:.2f} | Total: {current_loss:.6e} | "
+                f"PDE: {loss_physics.item():.6e} | Term: {loss_terminal.item():.6e} | "
+                f"Bnd: {loss_boundary.item():.6e} | Grad: {gn} | "
+                f"Best: {best_loss:.6e} @ {best_epoch}"
             )
 
     history["best_loss"] = best_loss

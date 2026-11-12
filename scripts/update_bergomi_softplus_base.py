@@ -26,11 +26,11 @@ from support_tools.model_wrapper import load_model, predict_price
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--src", default="trained_models/bergomi.pt")
-    p.add_argument("--dst", default="trained_models/bergomi.pt")
+    p.add_argument("--src", default="checkpoints/bergomi.pt")
+    p.add_argument("--dst", default="checkpoints/bergomi.pt")
     p.add_argument(
         "--backup",
-        default="trained_models/bergomi_pre_softplus.pt",
+        default="checkpoints/legacy/bergomi_pre_softplus.pt",
         help="Copy of pre-softplus weights (empty string to skip)",
     )
     p.add_argument("--beta", type=float, default=DEFAULT_PRICE_SOFTPLUS_BETA)

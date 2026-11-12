@@ -18,8 +18,8 @@ Epoch    700 | Time:      39.79s | LR: 5.970e-05 | Total: 1.998768e-03 | PDE: 1.
 Epoch    750 | Time:      42.58s | LR: 5.500e-05 | Total: 1.521006e-03 | PDE: 1.465499e-03 | Term: 5.257112e-05 | Bnd: 2.936243e-06 | Grad: 5.722e-03 | Best: 1.090676e-03 @ 370
 Epoch    800 | Time:      45.51s | LR: 5.030e-05 | Total: 2.223503e-03 | PDE: 2.162173e-03 | Term: 5.790296e-05 | Bnd: 3.427655e-06 | Grad: 8.880e-03 | Best: 1.090676e-03 @ 370
 Best loss 1.090676e-03 @ epoch 370
-Checkpoint: trained_models/bergomi2.pt
-History: bergomi2/artifacts/training_history.json
+Checkpoint: checkpoints/bergomi2.pt
+History: results/bergomi2/training_history.json
 Resume from epoch 370 loss 0.001090675825253129
 Epoch      1 | Time:       0.08s | LR: 5.000e-05 | Total: 2.351880e-03 | PDE: 2.316459e-03 | Term: 3.383820e-05 | Bnd: 1.582636e-06 | Grad: 1.858e-03 | Best: 2.351880e-03 @ 1
 Epoch     50 | Time:       3.06s | LR: 4.989e-05 | Total: 1.917861e-03 | PDE: 1.885794e-03 | Term: 3.025225e-05 | Bnd: 1.814295e-06 | Grad: 2.982e-03 | Best: 1.376259e-03 @ 13

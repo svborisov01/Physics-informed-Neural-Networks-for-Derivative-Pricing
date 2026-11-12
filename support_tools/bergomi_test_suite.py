@@ -638,8 +638,8 @@ def run_3d_error_surfaces(
 
 
 def run_extensive_bergomi_tests(
-    checkpoint: str = "trained_models/bergomi.pt",
-    out_dir: str | Path = "artifacts/bergomi_extensive_tests",
+    checkpoint: str = "checkpoints/bergomi.pt",
+    out_dir: str | Path = "results/bergomi",
     device: str = "cpu",
     n_paths_price: int = 131_072,
     n_paths_greeks: int = 262_144,
@@ -780,7 +780,7 @@ def write_extensive_tests_summary(report: dict, path: Path) -> None:
         "# Bergomi PINN extensive tests (QMC + ADD)",
         "",
         "Benchmark: scrambled Sobol **QMC** with **antithetic differencing (ADD)**.",
-        f"Checkpoint: `{report.get('checkpoint', 'trained_models/bergomi.pt')}`.",
+        f"Checkpoint: `{report.get('checkpoint', 'checkpoints/bergomi.pt')}`.",
         f"Positivity: softplus β={beta} "
         f"(negatives on fine grid: {pos.get('n_negative', '?')}/"
         f"{pos.get('n_total', '?')}, min V={pos.get('min_price', float('nan')):.4g}).",
@@ -837,13 +837,13 @@ def write_extensive_tests_summary(report: dict, path: Path) -> None:
         "## Reproduce plots only (fast)",
         "",
         "```bash",
-        "python scripts/plot_bergomi_surfaces.py --checkpoint trained_models/bergomi.pt",
+        "python scripts/plot_bergomi_surfaces.py --checkpoint checkpoints/bergomi.pt",
         "```",
         "",
         "Full QMC+ADD suite:",
         "",
         "```bash",
-        "python scripts/run_bergomi_extensive_tests.py --checkpoint trained_models/bergomi.pt",
+        "python scripts/run_bergomi_extensive_tests.py --checkpoint checkpoints/bergomi.pt",
         "```",
         "",
     ]

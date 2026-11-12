@@ -1,5 +1,5 @@
 {
-  "checkpoint": "trained_models/bergomi2.pt",
+  "checkpoint": "checkpoints/bergomi2.pt",
   "market": {
     "X1": 0.0,
     "X2": 0.0,

@@ -29,13 +29,12 @@ def main():
     p.add_argument("--lr", type=float, default=1e-4)
     p.add_argument("--print-every", type=int, default=50)
     p.add_argument("--device", default="cpu")
-    p.add_argument("--out-dir", default="bergomi2")
-    p.add_argument("--checkpoint", default="trained_models/bergomi2.pt")
+    p.add_argument("--out-dir", default="results/bergomi2")
+    p.add_argument("--checkpoint", default="checkpoints/bergomi2.pt")
     args = p.parse_args()
 
     out_dir = Path(args.out_dir)
-    art = out_dir / "artifacts"
-    art.mkdir(parents=True, exist_ok=True)
+    out_dir.mkdir(parents=True, exist_ok=True)
     Path(args.checkpoint).parent.mkdir(parents=True, exist_ok=True)
 
     device = torch.device(args.device)
@@ -76,7 +75,7 @@ def main():
     )
 
     # Save history JSON (lists only)
-    hist_path = art / "training_history.json"
+    hist_path = out_dir / "training_history.json"
     serializable = {
         k: (v if not isinstance(v, (np.ndarray,)) else v.tolist())
         for k, v in history.items()
@@ -97,7 +96,7 @@ def main():
     ax.grid(True, alpha=0.3)
     ax.legend(frameon=False)
     fig.tight_layout()
-    fig.savefig(art / "training_loss.png", bbox_inches="tight")
+    fig.savefig(out_dir / "training_loss.png", bbox_inches="tight")
     plt.close(fig)
 
     print(f"Best loss {history['best_loss']:.6e} @ epoch {history['best_epoch']}")

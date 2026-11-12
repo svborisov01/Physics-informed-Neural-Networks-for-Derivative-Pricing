@@ -1,4 +1,4 @@
-Loaded trained_models/bergomi.pt | sigma_mode=spot_var | softplus_β=400 | positivity=softplus
+Loaded checkpoints/bergomi.pt | sigma_mode=spot_var | softplus_β=400 | positivity=softplus
 
 === 1) Fine-grid price norms (baseline smile) ===
 Fine grid abs norms: L1=0.1102, L2=0.1373, Linf=0.3207, neg=0/1479, minV=0.0961
@@ -90,9 +90,9 @@ Fine grid abs norms: L1=0.1102, L2=0.1373, Linf=0.3207, neg=0/1479, minV=0.0961
 [3d surfaces] slow_mr: ξ₀=0.04, ω=1.2, κ=0.6, ρ=-0.6, X=0
 [3d surfaces] near_bs: ξ₀=0.04, ω=0.05, κ=2, ρ=0, X=0
 
-Wrote artifacts/bergomi_extensive_tests/report.json
-Wrote artifacts/bergomi_extensive_tests/SUMMARY.md
-Mirrored artifacts to /opt/cursor/artifacts/bergomi_extensive_tests
+Wrote results/bergomi/report.json
+Wrote results/bergomi/SUMMARY.md
+Mirrored artifacts to /opt/cursor/results/bergomi
 
 Summary — fine-grid abs norms: L1=0.1102, L2=0.1373, Linf=0.3207 | softplus_β=400.0 | neg=0/1479 | minV=0.09611944109201431
 Greeks[baseline] Delta L1=0.0082 Theta L1=0.2408

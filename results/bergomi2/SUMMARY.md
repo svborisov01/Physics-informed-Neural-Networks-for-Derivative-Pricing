@@ -4,7 +4,7 @@
 
 | Item | Value |
 |------|-------|
-| Checkpoint | `trained_models/bergomi2.pt` |
+| Checkpoint | `checkpoints/bergomi2.pt` |
 | Architecture | hidden=96, depth=4, **28 features** |
 | Positivity | softplus β=400 |
 | Baseline | BS with `spot_var` σ_eff |
@@ -22,7 +22,7 @@ dynamics so the physics term can keep decreasing; checkpoint selection
 weights terminal/boundary losses so price accuracy is preserved.
 
 Optimal feature list: see `pricing/bergomi2_option_pricing.py` → `FEATURE_NAMES`
-and `bergomi2/README.md`.
+and `results/bergomi2/README.md`.
 
 ## Accuracy vs Monte Carlo
 

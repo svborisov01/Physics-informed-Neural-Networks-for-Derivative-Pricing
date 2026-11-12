@@ -1,7 +1,7 @@
 # How volatility surfaces differ across models
 
 This note explains, in complete sentences, what each model can and cannot do to
-an implied-volatility (IV) surface. The accompanying plots in `artifacts/` are
+an implied-volatility (IV) surface. The accompanying plots in this folder are
 stylized illustrations of those capabilities; they are not PINN outputs, but
 they match the qualitative shapes that Monte Carlo prices of each model produce
 when inverted to Black–Scholes IV.

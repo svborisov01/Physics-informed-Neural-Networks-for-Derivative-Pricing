@@ -1,7 +1,7 @@
 # Bergomi PINN extensive tests (QMC + ADD)
 
 Benchmark: scrambled Sobol **QMC** with **antithetic differencing (ADD)**.
-Checkpoint: `trained_models/bergomi.pt`.
+Checkpoint: `checkpoints/bergomi.pt`.
 Positivity: softplus β=400.0 (negatives on fine grid: 0/1479, min V=0.09612).
 
 ## Where to find plots
@@ -43,11 +43,11 @@ Positivity: softplus β=400.0 (negatives on fine grid: 0/1479, min V=0.09612).
 ## Reproduce plots only (fast)
 
 ```bash
-python scripts/plot_bergomi_surfaces.py --checkpoint trained_models/bergomi.pt
+python scripts/plot_bergomi_surfaces.py --checkpoint checkpoints/bergomi.pt
 ```
 
 Full QMC+ADD suite:
 
 ```bash
-python scripts/run_bergomi_extensive_tests.py --checkpoint trained_models/bergomi.pt
+python scripts/run_bergomi_extensive_tests.py --checkpoint checkpoints/bergomi.pt
 ```

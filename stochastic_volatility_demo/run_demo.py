@@ -479,16 +479,14 @@ def main(symbol: str | None = "auto"):
     label = symbol if symbol is not None else "auto"
     print(f"Building option surface for {label}…")
 
-    pre_fits = None
     if symbol is None or str(symbol).lower() in {"auto", "none", ""}:
-        df, meta, pre_fits = choose_best_live_for_2f()
+        df, meta, _ = choose_best_live_for_2f()
         df.to_csv(ART / "market_quotes.csv", index=False)
         df.to_csv(ART / "market_quotes_live.csv", index=False)
         (ART / "market_meta.json").write_text(json.dumps(meta, indent=2))
         (ART / "market_meta_live.json").write_text(json.dumps(meta, indent=2))
     else:
         df, meta = load_or_fetch(symbol=symbol)
-        pre_fits = None
 
     print(
         f"Using {meta.get('source')} | symbol={meta.get('symbol')} | "
@@ -498,13 +496,27 @@ def main(symbol: str | None = "auto"):
     )
     if meta.get("yahoo_iv_mae_vs_ours") is not None:
         print(f"Yahoo IV MAE vs mid-implied: {meta['yahoo_iv_mae_vs_ours']:.4f}")
+    of = meta.get("outlier_filter") or {}
+    if of.get("n_removed"):
+        print(
+            f"Outlier filter: removed {of['n_removed']} / {of.get('n_before')} "
+            f"(kept {of.get('n_after')})"
+        )
     if meta.get("note"):
         print(f"Note: {meta['note']}")
+
+    # Persist removed outliers for audit
+    removed = meta.get("outliers_removed") or []
+    if removed:
+        pd.DataFrame(removed).to_csv(ART / "outliers_removed.csv", index=False)
+    elif (ART / "outliers_removed.csv").exists():
+        (ART / "outliers_removed.csv").unlink()
 
     k = df["k"].to_numpy(float)
     tau = df["tau"].to_numpy(float)
     iv = df["iv"].to_numpy(float)
-    fits = pre_fits if pre_fits is not None else fit_all(k, tau, iv)
+    # Always recalibrate on the final cleaned strip (ignore probe fits).
+    fits = fit_all(k, tau, iv)
     adv = two_factor_advantage(fits)
 
     sym_tag = str(meta.get("symbol", ""))

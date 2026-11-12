@@ -23,10 +23,12 @@ Artifacts land in `stochastic_volatility_demo/artifacts/`:
 | File | Content |
 |------|---------|
 | `market_iv_surface.png` | Market IV by moneyness / tenor |
-| `model_fits_smiles.png` | Fitted smiles vs market at several tenors |
+| `model_fits_smiles.png` | Fitted smiles vs market (**across moneyness**, fixed τ) |
+| `model_fits_tenors.png` | ATM / wing / skew term structures (**across τ**, fixed k) |
 | `fit_errors_by_tenor.png` | RMSE by maturity — 2F wins on short+long |
+| `fit_errors_by_moneyness.png` | RMSE by log-moneyness bucket |
 | `market_quotes.csv` | Filtered quotes used for the fit |
-| `fit_report.json` | Parameters + RMSE table |
+| `fit_report.json` | Parameters + RMSE by tenor and by moneyness |
 
 Default underlier: **SPY** via Yahoo Finance (`yfinance`). If the live
 download fails (weekend / rate limit), the script falls back to a cached

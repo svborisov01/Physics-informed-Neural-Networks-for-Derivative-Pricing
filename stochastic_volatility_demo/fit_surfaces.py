@@ -61,10 +61,36 @@ class FitResult:
     rmse: float
     mae: float
     rmse_by_tenor: dict
+    rmse_by_moneyness: dict
 
 
 def _pack(names, x):
     return {n: float(v) for n, v in zip(names, x)}
+
+
+def _rmse_by_tenor(tau: np.ndarray, err: np.ndarray) -> dict:
+    by = {}
+    for t in np.unique(np.round(tau, 6)):
+        m = np.isclose(tau, t, atol=1e-4)
+        if m.any():
+            by[float(t)] = float(np.sqrt(np.mean(err[m] ** 2)))
+    return by
+
+
+def _rmse_by_moneyness(k: np.ndarray, err: np.ndarray, n_bins: int = 5) -> dict:
+    """Bucket log-moneyness into equal-count bins and report IV RMSE in each."""
+    if len(k) < n_bins:
+        n_bins = max(1, len(k))
+    qs = np.linspace(0.0, 1.0, n_bins + 1)
+    edges = np.unique(np.quantile(k, qs))
+    if len(edges) < 2:
+        return {f"{float(k.min()):.2f}:{float(k.max()):.2f}": float(np.sqrt(np.mean(err**2)))}
+    by = {}
+    for lo, hi in zip(edges[:-1], edges[1:]):
+        m = (k >= lo) & (k <= hi if hi == edges[-1] else k < hi)
+        if m.any():
+            by[f"{lo:.2f}:{hi:.2f}"] = float(np.sqrt(np.mean(err[m] ** 2)))
+    return by
 
 
 def fit_model(name, fn, names, x0, bounds, k, tau, iv) -> FitResult:
@@ -77,18 +103,13 @@ def fit_model(name, fn, names, x0, bounds, k, tau, iv) -> FitResult:
     sol = least_squares(resid, x0=np.asarray(x0, float), bounds=(lo, hi), max_nfev=400)
     pred = fn(k, tau, **_pack(names, sol.x))
     err = pred - iv
-    tenors = np.unique(np.round(tau, 6))
-    by = {}
-    for t in tenors:
-        m = np.isclose(tau, t, atol=1e-4)
-        if m.any():
-            by[float(t)] = float(np.sqrt(np.mean(err[m] ** 2)))
     return FitResult(
         name=name,
         params=_pack(names, sol.x),
         rmse=float(np.sqrt(np.mean(err**2))),
         mae=float(np.mean(np.abs(err))),
-        rmse_by_tenor=by,
+        rmse_by_tenor=_rmse_by_tenor(tau, err),
+        rmse_by_moneyness=_rmse_by_moneyness(k, err),
     )
 
 

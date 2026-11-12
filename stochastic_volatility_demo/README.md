@@ -1,56 +1,50 @@
 # Stochastic volatility demo
 
-Download listed equity option quotes, strip a clean implied-volatility (IV)
-surface, and **fit** four parametric models side by side:
+Fit four parametric IV models side by side and show **why two Bergomi
+factors** are needed when the surface has a fast short smile **and** a
+slow long skew.
 
 1. Black–Scholes (flat σ)
-2. Heston-like (one CIR clock)
-3. 1-factor Bergomi-like (one OU clock)
-4. **2-factor Bergomi-like** (fast + slow OU clocks)
+2. Heston-like (**one** clock shared by ATM / skew / smile)
+3. 1-factor Bergomi (**one** OU clock)
+4. **2-factor Bergomi** (fast + slow OU clocks)
 
-The point of the demo is qualitative: only the two-factor surface can match a
-steep short-dated smile **and** a milder long-dated skew at the same time.
+Calibration is honest about clock count: 1F/Heston no longer get free
+independent smile decays (that would secretly add extra timescales).
+Residuals are equal-weighted by tenor.
 
-## IV extraction (important)
+## IV extraction (live quotes)
 
-Yahoo’s `impliedVolatility` field is **not** used for fitting. For each expiry
-the forward \(F\) is implied from near-ATM put-call parity
-\(C-P=e^{-r\tau}(F-K)\) (fallback \(S e^{(r-q)\tau}\)). Each quote’s IV is then
-re-implied from the mid price (else last) in the Black model with moneyness
-\(k=\log(K/F)\). Wide relative spreads and junk last prints are dropped.
-Yahoo IV is kept only as a diagnostic (typical MAE vs ours ≈ 1–2%).
+Yahoo’s `impliedVolatility` is **not** used for fitting. Per-expiry forward
+\(F\) comes from put-call parity; IVs are re-implied from mid (else last)
+with moneyness \(k=\log(K/F)\).
 
 ## Run
 
 ```bash
-pip install -r requirements.txt          # includes yfinance
-python stochastic_volatility_demo/run_demo.py            # ^SPX (default, densest)
-python stochastic_volatility_demo/run_demo.py AAPL       # single-name strip
-python stochastic_volatility_demo/run_demo.py auto       # best of AAPL/QQQ/SPY/^SPX
+pip install -r requirements.txt
+python stochastic_volatility_demo/run_demo.py              # synthetic (default; clearest 2F demo)
+python stochastic_volatility_demo/run_demo.py synthetic    # same
+python stochastic_volatility_demo/run_demo.py ^SPX         # live SPX strip
+python stochastic_volatility_demo/run_demo.py auto         # live if 2F advantage is clear, else synthetic
 ```
 
-Default underlier is **^SPX** — Yahoo’s densest live chain with real bid/ask
-(thousands of quotes before a light subsample to ~8×25 for plotting).
+Default is a **designed two-timescale** surface (κ_fast≈18, κ_slow≈0.35).
+On that strip 2F typically recovers both clocks and beats 1F/Heston by
+~10× in RMSE on short *and* long tenors. Live SPX can look flatter; `auto`
+falls back to synthetic when the live joint advantage is weak.
 
-**AAPL** (and other single names) also work: after hours Yahoo often blanks
-bid/ask, so the fetcher falls back to `lastPrice` for BS inversion. `auto`
-mode probes AAPL → QQQ → SPY → ^SPX and keeps the best strip (≥5 tenors),
-preferring mid-implied IVs.
-
-Artifacts land in `stochastic_volatility_demo/artifacts/`:
+Artifacts in `stochastic_volatility_demo/artifacts/`:
 
 | File | Content |
 |------|---------|
-| `market_iv_surface.png` | Market IV by forward moneyness / tenor |
-| `model_fits_smiles.png` | Fitted smiles vs market (**across moneyness**, fixed τ) |
-| `model_fits_tenors.png` | ATM / wing / skew term structures (**across τ**, fixed k) |
-| `model_iv_surfaces_3d.png` | 3D IV surfaces: market + all four models + 2F residual |
-| `model_surfaces_by_tenor.png` | Per-model smile grids across selected tenors |
-| `fit_errors_by_tenor.png` | RMSE by maturity — 2F wins on short+long |
-| `fit_errors_by_moneyness.png` | RMSE by log-moneyness bucket |
-| `market_quotes.csv` | Filtered quotes used for the fit |
-| `market_quotes_live.csv` | Full live snapshot before any synthetic fallback |
-| `fit_report.json` | Parameters + RMSE by tenor/moneyness + `hit_bounds` |
-
-If every live download fails, the script falls back to a synthetic
-equity-like surface so the demo still runs offline.
+| `model_short_long_contrast.png` | Short vs long smile — headline 2F proof |
+| `fit_short_vs_long.png` | Short-tenor vs long-tenor RMSE bars |
+| `model_residuals.png` | Residual heatmaps (Heston / 1F / 2F) |
+| `model_fits_smiles.png` | Smiles across moneyness |
+| `model_fits_tenors.png` | ATM / wing / skew term structures |
+| `model_iv_surfaces_3d.png` | 3D surfaces for all four models |
+| `model_surfaces_by_tenor.png` | Per-model smile grids |
+| `fit_errors_by_tenor.png` | RMSE by maturity |
+| `fit_errors_by_moneyness.png` | RMSE by moneyness bucket |
+| `fit_report.json` | Params, short/long RMSE, advantage ratios |

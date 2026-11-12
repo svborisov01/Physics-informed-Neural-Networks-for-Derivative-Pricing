@@ -1,15 +1,18 @@
-Fetching option surface for ^SPX…
-Using yahoo_finance | symbol=^SPX | spot=7619.3798828125 | n=200 quotes | tenors=8 | iv=bs_invert_from_mid_else_last | k=log(K/F)
-Yahoo IV MAE vs mid-implied: 0.0157
+/workspace/stochastic_volatility_demo/run_demo.py:426: UserWarning: This figure includes Axes that are not compatible with tight_layout, so results might be incorrect.
+  fig.tight_layout()
+Building option surface for synthetic…
+Using synthetic_equity_like | symbol=SYNTHETIC_2CLOCK | spot=500.0 | n=200 quotes | tenors=8 | iv=synthetic_two_timescale | k=log(K/F)
+Note: Designed two-timescale surface (κ_fast≈18, κ_slow≈0.35): short smile vs persistent long skew.
 
 IV fit RMSE (lower is better):
-  2-factor Bergomi    RMSE=0.0093  MAE=0.0065
-    params={'xi0': 0.03477428620557308, 'kappa1': 11.084918887840626, 'kappa2': 0.4612578421560135, 'atm1': -0.0170612843440787, 'atm2': -0.0349443914813121, 'skew1': -0.6847589475174891, 'skew2': -0.41857369441159253, 'smile1': 2.6935675655242224, 'smile2': 0.8095124449918679}
-  Heston-like         RMSE=0.0123  MAE=0.0087
-    params={'v0': 0.019874947842461646, 'v_inf': 0.0335356957851136, 'kappa': 1.2609272037501782, 'skew0': -0.5664822919559536, 'skew_decay': 0.7382632260903012, 'smile0': 4.249639779475229, 'smile_decay': 5.59662457680937}
-  1-factor Bergomi    RMSE=0.0123  MAE=0.0088
-    params={'xi0': 0.0380333639175132, 'kappa': 0.7796906219989874, 'atm0': -0.05206405055319886, 'skew0': -0.5752488880532507, 'smile0': 3.9298139445116473, 'smile_decay': 4.886784396583963}
-  Black–Scholes       RMSE=0.0599  MAE=0.0458
-    params={'sigma': 0.18190313496501465}
+  2-factor Bergomi    RMSE=0.0014  short=0.0014  long=0.0014
+    params={'xi0': 0.025252920721778004, 'kappa1': 18.07475309428392, 'kappa2': 0.35457041333128825, 'atm1': 0.05259836986183788, 'atm2': 0.03169836190177194, 'skew1': -0.5453513713582073, 'skew2': -0.3790373690703871, 'smile1': 3.9221596388188003, 'smile2': 0.5382415168750111}
+  1-factor Bergomi    RMSE=0.0179  short=0.0216  long=0.0133
+    params={'xi0': 0.025172443068773684, 'kappa': 1.110120973678473, 'atm0': 0.04735347122867891, 'skew0': -0.547498947481501, 'smile0': 1.3260207800169657}
+  Heston-like         RMSE=0.0180  short=0.0217  long=0.0134
+    params={'v0': 0.04192046212735831, 'v_inf': 0.025107315950535846, 'kappa': 1.1252624413817858, 'skew0': -0.5489153008597397, 'smile0': 1.342573978755857}
+  Black–Scholes       RMSE=0.0674  short=0.0822  long=0.0481
+    params={'sigma': 0.21456241850838767}
 
+2F advantage: rmse_ratio=13.02×  short=15.84×  long=9.56×  joint=9.56×
 Wrote artifacts to /workspace/stochastic_volatility_demo/artifacts

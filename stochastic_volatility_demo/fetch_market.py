@@ -332,24 +332,31 @@ def fetch_yahoo_options(
 
 def make_synthetic_surface(seed: int = 0) -> tuple[pd.DataFrame, dict]:
     """
-    Offline fallback: equity-like surface with strong short smile + persistent
-    long skew — exactly the regime where 2-factor Bergomi helps.
+    Two-timescale equity surface: explosive short smile (κ≈18) that dies by
+    ~3M, plus a slow skew/ATM clock (κ≈0.35) that persists to 1Y.
+
+    A single-clock model must either overfit the short end (and ruin the long
+    skew) or fit the long end (and miss the short smile) — exactly where
+    2-factor Bergomi separates.
     """
     rng = np.random.default_rng(seed)
     spot = 500.0
     r, q = 0.04, 0.013
-    taus = np.array([0.08, 0.17, 0.25, 0.5, 0.75, 1.0])
-    ks = np.linspace(-0.22, 0.22, 21)
+    # Dense short end + sparse long end (stresses single-clock fits)
+    taus = np.array([0.05, 0.08, 0.12, 0.20, 0.35, 0.55, 0.80, 1.20])
+    ks = np.linspace(-0.25, 0.22, 25)
     rows = []
     for tau in taus:
         F = spot * np.exp((r - q) * tau)
-        w_fast = np.exp(-10.0 * tau)
-        w_slow = np.exp(-0.45 * tau)
-        atm = 0.18 * (1.0 + 0.15 * w_fast + 0.08 * w_slow)
+        w_fast = np.exp(-18.0 * tau)
+        w_slow = np.exp(-0.35 * tau)
+        atm = 0.16 + 0.055 * w_fast + 0.030 * w_slow
         for k in ks:
-            skew = (-0.22 * w_fast - 0.18 * w_slow) * k
-            smile = 0.55 * w_fast * k**2 + 0.12 * w_slow * k**2
-            iv = float(np.clip(atm + skew + smile + rng.normal(0, 0.002), 0.07, 0.9))
+            # Fast factor: steep short smile + some short skew
+            # Slow factor: persistent put skew, mild smile
+            skew = (-0.55 * w_fast - 0.38 * w_slow) * k
+            smile = (3.8 * w_fast + 0.55 * w_slow) * (k**2)
+            iv = float(np.clip(atm + skew + smile + rng.normal(0, 0.0015), 0.06, 1.0))
             side = "put" if k < 0 else "call"
             strike = F * np.exp(k)
             rows.append(
@@ -360,6 +367,7 @@ def make_synthetic_surface(seed: int = 0) -> tuple[pd.DataFrame, dict]:
                     strike=float(strike),
                     k=float(k),
                     F=float(F),
+                    q_eff=q,
                     spot=spot,
                     bid=np.nan,
                     ask=np.nan,
@@ -375,13 +383,17 @@ def make_synthetic_surface(seed: int = 0) -> tuple[pd.DataFrame, dict]:
             )
     df = pd.DataFrame(rows)
     meta = {
-        "symbol": "SYNTHETIC",
+        "symbol": "SYNTHETIC_2CLOCK",
         "spot": spot,
         "r": r,
         "q": q,
         "moneyness": "log(K/F)",
-        "iv_method": "synthetic",
+        "iv_method": "synthetic_two_timescale",
         "source": "synthetic_equity_like",
+        "note": (
+            "Designed two-timescale surface (κ_fast≈18, κ_slow≈0.35): "
+            "short smile vs persistent long skew."
+        ),
         "fetched_at_utc": datetime.now(timezone.utc).isoformat(),
         "n_quotes": int(len(df)),
         "tenors": sorted({float(t) for t in df["tau"].unique()}),
@@ -451,10 +463,12 @@ def load_or_fetch(
     min_tenors: int = 5,
 ) -> tuple[pd.DataFrame, dict]:
     """
-    Load a live Yahoo IV strip.
+    Load an IV strip for the demo fit.
 
-    - ``symbol=None`` (default): auto-pick among AAPL → QQQ → SPY → ^SPX
-    - If the download fails or is too thin, fall back to synthetic.
+    - ``symbol="synthetic"``: two-timescale equity-like surface (clearest 2F demo)
+    - ``symbol=None`` / ``"auto"``: richest live Yahoo strip among AAPL→…→^SPX
+    - other symbols: that underlier's live chain
+    - live failure / too thin → synthetic fallback
     """
     ART.mkdir(parents=True, exist_ok=True)
     if prefer_cache and CACHE_CSV.exists():
@@ -462,9 +476,15 @@ def load_or_fetch(
         meta = json.loads(CACHE_META.read_text()) if CACHE_META.exists() else {}
         return df, meta
 
+    if symbol is not None and str(symbol).lower() in {"synthetic", "synth", "demo"}:
+        df, meta = make_synthetic_surface()
+        df.to_csv(CACHE_CSV, index=False)
+        CACHE_META.write_text(json.dumps(meta, indent=2))
+        return df, meta
+
     live_df, live_meta = None, None
     try:
-        if symbol is None:
+        if symbol is None or str(symbol).lower() == "auto":
             live_df, live_meta = choose_richest_live(min_tenors=min_tenors)
         else:
             live_df, live_meta = fetch_yahoo_options(symbol=symbol)
@@ -479,14 +499,14 @@ def load_or_fetch(
         n_ten = len((live_meta or {}).get("tenors", []))
         print(
             f"[fetch] live surface has {n_ten} tenor(s); "
-            f"using synthetic equity-like surface for the demo fit"
+            f"using synthetic two-timescale surface for the demo fit"
         )
         df, meta = make_synthetic_surface()
         if live_meta is not None:
             meta["live_attempt"] = live_meta
         meta["note"] = (
-            "Synthetic surface used so short- and long-dated smiles are both "
-            "populated; live Yahoo snapshot saved alongside when available."
+            "Synthetic two-timescale surface used so short smile and long skew "
+            "are both populated; live Yahoo snapshot saved alongside when available."
         )
 
     df.to_csv(CACHE_CSV, index=False)

@@ -2,14 +2,16 @@
 """
 Parametric IV-surface models and least-squares fits to market quotes.
 
-Factor structure (what differs across models):
+Factor structure is the *only* degree-of-freedom difference:
 
-- Black–Scholes: constant σ
-- Heston-like: one mean-reversion clock for ATM / skew / smile
-- 1-factor Bergomi: one OU clock with free ATM/skew/smile amplitudes
-- 2-factor Bergomi: fast + slow OU clocks (independent short/long structure)
+- Black–Scholes: flat σ
+- Heston-like: **one** mean-reversion clock shared by ATM / skew / smile
+- 1-factor Bergomi: **one** OU clock shared by ATM / skew / smile
+- 2-factor Bergomi: **two** OU clocks (fast short smile + slow long skew)
 
-All shape amplitudes are free; clocks (κ) encode the factor structure.
+Earlier free smile/skew decays on 1F/Heston secretly added extra clocks and
+hid the 2F advantage. Residuals are **equal-weighted by tenor** so dense
+short strips cannot dominate the objective.
 """
 
 from __future__ import annotations
@@ -32,18 +34,15 @@ def heston_like_iv(
     v_inf=0.04,
     kappa=2.0,
     skew0=-0.3,
-    skew_decay=0.6,
     smile0=0.15,
-    smile_decay=0.4,
 ):
-    """Single-timescale surface: ATM → v_inf, skew/smile share one clock."""
+    """Single clock κ drives ATM, skew, and smile jointly."""
     k = np.asarray(k, dtype=float)
     tau = np.asarray(tau, dtype=float)
-    atm = np.sqrt(
-        np.maximum(v_inf + (v0 - v_inf) * np.exp(-kappa * tau), 1e-8)
-    )
-    skew = skew0 * np.exp(-skew_decay * tau) * k
-    smile = smile0 * np.exp(-smile_decay * tau) * (k**2)
+    w = np.exp(-kappa * tau)
+    atm = np.sqrt(np.maximum(v_inf + (v0 - v_inf) * w, 1e-8))
+    skew = skew0 * w * k
+    smile = smile0 * w * (k**2)
     return np.clip(atm + skew + smile, 0.03, 1.5)
 
 
@@ -55,15 +54,14 @@ def bergomi1_like_iv(
     atm0=0.0,
     skew0=-0.4,
     smile0=0.35,
-    smile_decay=1.2,
 ):
-    """One OU clock: ATM/skew ~ e^{-κτ}; smile has its own decay."""
+    """One OU clock: ATM / skew / smile all ∝ e^{-κτ}."""
     k = np.asarray(k, dtype=float)
     tau = np.asarray(tau, dtype=float)
     w = np.exp(-kappa * tau)
     atm = np.sqrt(max(xi0, 1e-8)) + atm0 * w
     skew = skew0 * w * k
-    smile = smile0 * np.exp(-smile_decay * tau) * (k**2)
+    smile = smile0 * w * (k**2)
     return np.clip(atm + skew + smile, 0.03, 1.5)
 
 
@@ -80,7 +78,7 @@ def bergomi2_like_iv(
     smile1=0.45,
     smile2=0.12,
 ):
-    """Two OU clocks: fast (short smile/skew) + slow (long ATM/skew)."""
+    """Two OU clocks: fast (short smile) + slow (long skew/ATM)."""
     k = np.asarray(k, dtype=float)
     tau = np.asarray(tau, dtype=float)
     w1 = np.exp(-kappa1 * tau)
@@ -97,6 +95,9 @@ class FitResult:
     params: dict
     rmse: float
     mae: float
+    rmse_weighted: float
+    rmse_short: float
+    rmse_long: float
     rmse_by_tenor: dict
     rmse_by_moneyness: dict
     success: bool
@@ -106,6 +107,18 @@ class FitResult:
 
 def _pack(names, x):
     return {n: float(v) for n, v in zip(names, x)}
+
+
+def _tenor_weights(tau: np.ndarray) -> np.ndarray:
+    """Equal weight per unique tenor (√n_t in residual → equal tenor SSE)."""
+    tau_r = np.round(tau, 6)
+    w = np.ones_like(tau, dtype=float)
+    for t in np.unique(tau_r):
+        m = tau_r == t
+        n = int(m.sum())
+        if n > 0:
+            w[m] = 1.0 / np.sqrt(n)
+    return w
 
 
 def _rmse_by_tenor(tau: np.ndarray, err: np.ndarray) -> dict:
@@ -135,6 +148,15 @@ def _rmse_by_moneyness(k: np.ndarray, err: np.ndarray, n_bins: int = 5) -> dict:
     return by
 
 
+def _short_long_rmse(tau: np.ndarray, err: np.ndarray):
+    med = float(np.median(tau))
+    short = err[tau <= med]
+    long = err[tau > med]
+    rs = float(np.sqrt(np.mean(short**2))) if len(short) else float("nan")
+    rl = float(np.sqrt(np.mean(long**2))) if len(long) else float("nan")
+    return rs, rl
+
+
 def _hit_bounds(x, lo, hi, names, tol=1e-8):
     hits = []
     for n, xi, a, b in zip(names, x, lo, hi):
@@ -143,17 +165,18 @@ def _hit_bounds(x, lo, hi, names, tol=1e-8):
     return hits
 
 
-def fit_model(name, fn, names, x0, bounds, k, tau, iv, n_starts: int = 6) -> FitResult:
+def fit_model(name, fn, names, x0, bounds, k, tau, iv, n_starts: int = 8) -> FitResult:
     lo, hi = np.asarray(bounds[0], float), np.asarray(bounds[1], float)
     x0 = np.asarray(x0, float)
     rng = np.random.default_rng(0)
+    w = _tenor_weights(tau)
 
     def resid(x):
-        return fn(k, tau, **_pack(names, x)) - iv
+        return w * (fn(k, tau, **_pack(names, x)) - iv)
 
     candidates = [x0]
     for _ in range(max(0, n_starts - 1)):
-        jitter = x0 + 0.25 * (hi - lo) * rng.normal(size=len(x0))
+        jitter = x0 + 0.30 * (hi - lo) * rng.normal(size=len(x0))
         candidates.append(np.clip(jitter, lo + 1e-8, hi - 1e-8))
 
     best = None
@@ -162,7 +185,7 @@ def fit_model(name, fn, names, x0, bounds, k, tau, iv, n_starts: int = 6) -> Fit
             resid,
             x0=x_init,
             bounds=(lo, hi),
-            max_nfev=1200,
+            max_nfev=1500,
             ftol=1e-12,
             xtol=1e-12,
             gtol=1e-12,
@@ -175,11 +198,15 @@ def fit_model(name, fn, names, x0, bounds, k, tau, iv, n_starts: int = 6) -> Fit
     params = _pack(names, sol.x)
     pred = fn(k, tau, **params)
     err = pred - iv
+    rs, rl = _short_long_rmse(tau, err)
     return FitResult(
         name=name,
         params=params,
         rmse=float(np.sqrt(np.mean(err**2))),
         mae=float(np.mean(np.abs(err))),
+        rmse_weighted=float(np.sqrt(np.mean((w * err) ** 2))),
+        rmse_short=rs,
+        rmse_long=rl,
         rmse_by_tenor=_rmse_by_tenor(tau, err),
         rmse_by_moneyness=_rmse_by_moneyness(k, err),
         success=bool(sol.success),
@@ -210,11 +237,11 @@ def fit_all(k, tau, iv) -> list[FitResult]:
         fit_model(
             "Heston-like",
             heston_like_iv,
-            ["v0", "v_inf", "kappa", "skew0", "skew_decay", "smile0", "smile_decay"],
-            [v0, v0, 2.0, -0.5, 0.7, 1.0, 1.0],
+            ["v0", "v_inf", "kappa", "skew0", "smile0"],
+            [v0, v0, 2.0, -0.5, 1.5],
             (
-                [0.002, 0.002, 0.05, -3.0, 0.02, 0.01, 0.02],
-                [0.40, 0.40, 20.0, 0.5, 8.0, 8.0, 10.0],
+                [0.002, 0.002, 0.05, -4.0, 0.01],
+                [0.40, 0.40, 25.0, 0.5, 12.0],
             ),
             k,
             tau,
@@ -223,11 +250,11 @@ def fit_all(k, tau, iv) -> list[FitResult]:
         fit_model(
             "1-factor Bergomi",
             bergomi1_like_iv,
-            ["xi0", "kappa", "atm0", "skew0", "smile0", "smile_decay"],
-            [v0, 2.0, 0.02, -0.5, 1.0, 1.5],
+            ["xi0", "kappa", "atm0", "skew0", "smile0"],
+            [v0, 2.0, 0.02, -0.5, 1.5],
             (
-                [0.002, 0.05, -0.15, -3.0, 0.01, 0.05],
-                [0.40, 20.0, 0.25, 0.5, 8.0, 10.0],
+                [0.002, 0.05, -0.20, -4.0, 0.01],
+                [0.40, 25.0, 0.30, 0.5, 12.0],
             ),
             k,
             tau,
@@ -247,16 +274,37 @@ def fit_all(k, tau, iv) -> list[FitResult]:
                 "smile1",
                 "smile2",
             ],
-            [v0, 8.0, 0.5, 0.03, 0.01, -0.6, -0.25, 1.5, 0.4],
+            [v0, 10.0, 0.4, 0.04, 0.01, -0.7, -0.25, 2.0, 0.3],
             (
-                [0.002, 0.8, 0.01, -0.20, -0.15, -4.0, -3.0, 0.01, 0.0],
-                [0.40, 40.0, 4.0, 0.30, 0.25, 0.5, 0.5, 10.0, 5.0],
+                [0.002, 1.5, 0.05, -0.25, -0.20, -5.0, -3.0, 0.01, 0.0],
+                [0.40, 40.0, 3.0, 0.35, 0.30, 0.5, 0.5, 12.0, 4.0],
             ),
             k,
             tau,
             iv,
         ),
     ]
+
+
+def two_factor_advantage(fits: list[FitResult]) -> dict:
+    """
+    Scalar that is large when 2F uniquely wins on short *and* long tenors.
+    """
+    by = {fr.name: fr for fr in fits}
+    f2 = by["2-factor Bergomi"]
+    rivals = [by["Heston-like"], by["1-factor Bergomi"]]
+    best_rival_rmse = min(fr.rmse for fr in rivals)
+    best_rival_short = min(fr.rmse_short for fr in rivals)
+    best_rival_long = min(fr.rmse_long for fr in rivals)
+    return {
+        "rmse_ratio": float(best_rival_rmse / max(f2.rmse, 1e-12)),
+        "short_ratio": float(best_rival_short / max(f2.rmse_short, 1e-12)),
+        "long_ratio": float(best_rival_long / max(f2.rmse_long, 1e-12)),
+        "joint_score": float(
+            min(best_rival_short / max(f2.rmse_short, 1e-12),
+                best_rival_long / max(f2.rmse_long, 1e-12))
+        ),
+    }
 
 
 MODEL_FN = {

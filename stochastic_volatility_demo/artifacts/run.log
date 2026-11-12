@@ -1,10 +1,16 @@
-Fetching option surface for ^SPX…
-Using yahoo_finance | symbol=^SPX | spot=7619.3798828125 | n=200 quotes | tenors=8
+Building option surface for NVDA…
+Using yahoo_finance | symbol=NVDA | spot=173.72999572753906 | n=120 quotes | tenors=8 | iv=bs_invert_from_mid_else_last | k=log(K/F)
+Yahoo IV MAE vs mid-implied: 0.1234
 
 IV fit RMSE (lower is better):
-  2-factor Bergomi    RMSE=0.0380  MAE=0.0277
-  1-factor Bergomi    RMSE=0.0411  MAE=0.0300
-  Heston-like         RMSE=0.0457  MAE=0.0326
-  Black–Scholes       RMSE=0.0644  MAE=0.0476
+  2-factor Bergomi    RMSE=0.0085  short=0.0080  long=0.0092
+    params={'xi0': 0.19588671194237703, 'kappa1': 15.458812326253522, 'kappa2': 1.5242124710856664, 'atm1': 0.39025047190610496, 'atm2': 0.08045325706870433, 'skew1': -0.2177637868936786, 'skew2': -0.2533755314703859, 'smile1': 1.4524976790104225, 'smile2': 0.3069094408378865}
+  1-factor Bergomi    RMSE=0.0162  short=0.0165  long=0.0158
+    params={'xi0': 0.2127885507657641, 'kappa': 7.591573880834377, 'atm0': 0.31384771413634827, 'skew0': -0.56464568644812, 'smile0': 1.1064759060901985}
+  Heston-like         RMSE=0.0170  short=0.0175  long=0.0162
+    params={'v0': 0.580569696143643, 'v_inf': 0.2138069492695615, 'kappa': 8.506398104011947, 'skew0': -0.6035589137772955, 'smile0': 1.2270088304266906}
+  Black–Scholes       RMSE=0.0822  short=0.0871  long=0.0736
+    params={'sigma': 0.5332151811596076}
 
+2F advantage: rmse_ratio=1.92×  short=2.07×  long=1.72×  joint=1.72×
 Wrote artifacts to /workspace/stochastic_volatility_demo/artifacts

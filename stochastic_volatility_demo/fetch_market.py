@@ -405,6 +405,21 @@ def fetch_yahoo_options(
     n_before = len(otm)
     if len(otm["tau"].unique()) > 10 or len(otm) > 400:
         otm = _subsample_surface(otm, max_tenors=8, max_strikes_per_tenor=25)
+        # Subsample changes local density — re-filter so sparse smiles stay clean.
+        otm, outlier_info2 = filter_iv_outliers(otm, z_max=2.5, max_abs_resid=0.035)
+        outlier_info = {
+            "n_before": outlier_info["n_before"],
+            "n_after": outlier_info2["n_after"],
+            "n_removed": int(
+                outlier_info["n_removed"] + outlier_info2["n_removed"]
+            ),
+            "z_max": outlier_info2["z_max"],
+            "max_abs_resid": outlier_info2["max_abs_resid"],
+            "max_neighbor_jump": outlier_info2["max_neighbor_jump"],
+            "removed": outlier_info["removed"] + outlier_info2["removed"],
+            "n_removed_pre_subsample": outlier_info["n_removed"],
+            "n_removed_post_subsample": outlier_info2["n_removed"],
+        }
 
     # Diagnostic: disagreement vs Yahoo IV on the kept strip
     both = otm[np.isfinite(otm["yahoo_iv"]) & (otm["yahoo_iv"] > min_iv)]

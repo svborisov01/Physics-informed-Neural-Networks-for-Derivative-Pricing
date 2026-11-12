@@ -1,17 +1,17 @@
 Building option surface for NVDA…
-Using yahoo_finance | symbol=NVDA | spot=173.72999572753906 | n=116 quotes | tenors=8 | iv=bs_invert_from_mid_else_last | k=log(K/F)
-Yahoo IV MAE vs mid-implied: 0.1107
-Outlier filter: removed 17 / 267 (kept 250)
+Using yahoo_finance | symbol=NVDA | spot=173.72999572753906 | n=110 quotes | tenors=8 | iv=bs_invert_from_mid_else_last | k=log(K/F)
+Yahoo IV MAE vs mid-implied: 0.1223
+Outlier filter (fetch): removed 19 / 267 (kept 110)
 
 IV fit RMSE (lower is better):
-  2-factor Bergomi    RMSE=0.0028  short=0.0029  long=0.0027
-    params={'xi0': 0.20105997892290417, 'kappa1': 15.04382009519724, 'kappa2': 1.682720455312604, 'atm1': 0.3790320396070948, 'atm2': 0.07194328629004884, 'skew1': -0.1963288216748041, 'skew2': -0.2435695253584595, 'smile1': 1.7118656286599594, 'smile2': 0.2927984131018584}
-  1-factor Bergomi    RMSE=0.0129  short=0.0138  long=0.0115
-    params={'xi0': 0.2150212867592693, 'kappa': 8.197961095394893, 'atm0': 0.31480579634322475, 'skew0': -0.5402319100596813, 'smile0': 1.6393866323619992}
-  Heston-like         RMSE=0.0137  short=0.0148  long=0.0119
-    params={'v0': 0.5824049257093231, 'v_inf': 0.2158978459531826, 'kappa': 9.105211569028304, 'skew0': -0.5775718800193345, 'smile0': 1.8174691502546314}
-  Black–Scholes       RMSE=0.0805  short=0.0854  long=0.0724
-    params={'sigma': 0.5342533564873118}
+  2-factor Bergomi    RMSE=0.0030  short=0.0032  long=0.0026
+    params={'xi0': 0.20278718256994896, 'kappa1': 16.038117801722453, 'kappa2': 2.022481211669551, 'atm1': 0.3969619053061211, 'atm2': 0.08281625181621513, 'skew1': -0.08259069002867671, 'skew2': -0.27004275932711475, 'smile1': 1.02412782601889, 'smile2': 0.3236762539105141}
+  1-factor Bergomi    RMSE=0.0127  short=0.0143  long=0.0099
+    params={'xi0': 0.21489371278959363, 'kappa': 7.928428971099413, 'atm0': 0.3213186290311034, 'skew0': -0.48815688656148204, 'smile0': 1.1719553095786686}
+  Heston-like         RMSE=0.0135  short=0.0153  long=0.0104
+    params={'v0': 0.5923604660491403, 'v_inf': 0.21578600307972867, 'kappa': 8.826367288183, 'skew0': -0.5200154949623295, 'smile0': 1.3041352507120114}
+  Black–Scholes       RMSE=0.0843  short=0.0906  long=0.0741
+    params={'sigma': 0.5352771108368711}
 
-2F advantage: rmse_ratio=4.56×  short=4.73×  long=4.23×  joint=4.23×
+2F advantage: rmse_ratio=4.26×  short=4.49×  long=3.75×  joint=3.75×
 Wrote artifacts to /workspace/stochastic_volatility_demo/artifacts

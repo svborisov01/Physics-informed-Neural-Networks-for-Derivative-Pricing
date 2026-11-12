@@ -26,7 +26,11 @@ ROOT = Path(__file__).resolve().parent
 if str(ROOT.parent) not in sys.path:
     sys.path.insert(0, str(ROOT.parent))
 
-from stochastic_volatility_demo.fetch_market import choose_best_live_for_2f, load_or_fetch
+from stochastic_volatility_demo.fetch_market import (
+    choose_best_live_for_2f,
+    filter_iv_outliers,
+    load_or_fetch,
+)
 from stochastic_volatility_demo.fit_surfaces import (
     MODEL_FN,
     fit_all,
@@ -71,8 +75,50 @@ def plot_market_surface(df: pd.DataFrame, path: Path):
     )
     ax.set_xlabel(r"Forward log-moneyness $k=\log(K/F)$")
     ax.set_ylabel(r"Maturity $\tau$")
-    ax.set_title("Market implied volatility (OTM strip)")
+    ax.set_title("Market implied volatility (cleaned OTM strip — outliers removed)")
     fig.colorbar(sc, ax=ax, label=r"$\sigma_{\mathrm{IV}}$")
+    ax.grid(True, alpha=0.25)
+    fig.tight_layout()
+    fig.savefig(path, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+
+
+def plot_outliers_diagnostic(
+    df_kept: pd.DataFrame,
+    removed: list,
+    path: Path,
+    symbol: str = "",
+):
+    """Show kept points used in scatters vs removed outliers (×)."""
+    fig, ax = plt.subplots(figsize=(8.2, 4.8), dpi=150)
+    ax.scatter(
+        df_kept["k"],
+        df_kept["tau"],
+        c=df_kept["iv"],
+        cmap="turbo",
+        s=28,
+        alpha=0.9,
+        edgecolors="none",
+        label=f"Kept (n={len(df_kept)})",
+        zorder=3,
+    )
+    if removed:
+        rdf = pd.DataFrame(removed)
+        ax.scatter(
+            rdf["k"],
+            rdf["tau"],
+            s=55,
+            marker="x",
+            color="crimson",
+            linewidths=1.6,
+            label=f"Outliers removed (n={len(rdf)})",
+            zorder=5,
+        )
+    tag = f" — {symbol}" if symbol else ""
+    ax.set_xlabel(r"$k=\log(K/F)$")
+    ax.set_ylabel(r"$\tau$")
+    ax.set_title(f"Scatter points used in fits{tag} (outliers excluded)")
+    ax.legend(frameon=False, fontsize=8)
     ax.grid(True, alpha=0.25)
     fig.tight_layout()
     fig.savefig(path, bbox_inches="tight", facecolor="white")
@@ -86,7 +132,14 @@ def plot_smile_fits(df: pd.DataFrame, fits, path: Path):
     k_line = np.linspace(df["k"].min(), df["k"].max(), 160)
     for ax, tau in zip(axes, tenors):
         mkt = df[np.isclose(df["tau"], tau, atol=1e-3)].sort_values("k")
-        ax.scatter(mkt["k"], mkt["iv"], s=26, color="k", zorder=5, label="Market")
+        ax.scatter(
+            mkt["k"],
+            mkt["iv"],
+            s=26,
+            color="k",
+            zorder=5,
+            label="Market (cleaned)",
+        )
         for fr in fits:
             pred = MODEL_FN[fr.name](k_line, np.full_like(k_line, tau), **fr.params)
             ax.plot(
@@ -103,7 +156,7 @@ def plot_smile_fits(df: pd.DataFrame, fits, path: Path):
         ax.grid(True, alpha=0.3)
         ax.legend(frameon=False, fontsize=7)
     fig.suptitle(
-        "Fitted smiles — single-clock models compromise; 2F tracks short and long",
+        "Fitted smiles on cleaned quotes — outliers excluded from scatters",
         y=1.01,
     )
     fig.tight_layout()
@@ -446,7 +499,14 @@ def plot_short_long_smile_contrast(
         (axes[1], tau_l, "Long tenor — needs a slow skew clock"),
     ):
         mkt = df[np.isclose(df["tau"], tau, atol=1e-3)].sort_values("k")
-        ax.scatter(mkt["k"], mkt["iv"], s=30, color="k", zorder=5, label="Market")
+        ax.scatter(
+            mkt["k"],
+            mkt["iv"],
+            s=30,
+            color="k",
+            zorder=5,
+            label="Market (cleaned)",
+        )
         for fr in fits:
             if fr.name == "Black–Scholes":
                 continue
@@ -465,7 +525,7 @@ def plot_short_long_smile_contrast(
         ax.grid(True, alpha=0.3)
         ax.legend(frameon=False, fontsize=8)
     fig.suptitle(
-        f"Live{tag}: 1F/Heston miss one end; 2F matches both",
+        f"Live{tag}: cleaned quotes only — 1F/Heston miss one end; 2F matches both",
         y=1.02,
     )
     fig.tight_layout()
@@ -499,27 +559,67 @@ def main(symbol: str | None = "auto"):
     of = meta.get("outlier_filter") or {}
     if of.get("n_removed"):
         print(
-            f"Outlier filter: removed {of['n_removed']} / {of.get('n_before')} "
+            f"Outlier filter (fetch): removed {of['n_removed']} / {of.get('n_before')} "
             f"(kept {of.get('n_after')})"
         )
     if meta.get("note"):
         print(f"Note: {meta['note']}")
 
-    # Persist removed outliers for audit
-    removed = meta.get("outliers_removed") or []
+    # Final gate: iterate until the strip used for scatters is stable/clean.
+    removed = list(meta.get("outliers_removed") or [])
+    gate_removed = 0
+    for _ in range(4):
+        df_clean, final_info = filter_iv_outliers(
+            df, z_max=2.5, max_abs_resid=0.035, max_neighbor_jump=0.05
+        )
+        if final_info["n_removed"] == 0:
+            break
+        gate_removed += final_info["n_removed"]
+        removed.extend(final_info["removed"])
+        df = df_clean
+    else:
+        # Last assignment if we never broke
+        df = df_clean
+    if gate_removed:
+        print(
+            f"Outlier filter (final plot gate): removed {gate_removed} more "
+            f"→ n={len(df)}"
+        )
+        of = {
+            **of,
+            "n_after": int(len(df)),
+            "n_removed": int(of.get("n_removed", 0) + gate_removed),
+            "final_gate_removed": int(gate_removed),
+        }
+        meta["outlier_filter"] = of
+        meta["outliers_removed"] = removed
+    df = df.reset_index(drop=True)
+    df.to_csv(ART / "market_quotes.csv", index=False)
+
     if removed:
         pd.DataFrame(removed).to_csv(ART / "outliers_removed.csv", index=False)
     elif (ART / "outliers_removed.csv").exists():
         (ART / "outliers_removed.csv").unlink()
 
+    # Sanity: scatter strip must not contain further removable outliers.
+    _, check = filter_iv_outliers(
+        df, z_max=2.5, max_abs_resid=0.035, max_neighbor_jump=0.05
+    )
+    if check["n_removed"]:
+        raise RuntimeError(
+            f"Scatter strip still has {check['n_removed']} outliers after final gate"
+        )
+
     k = df["k"].to_numpy(float)
     tau = df["tau"].to_numpy(float)
     iv = df["iv"].to_numpy(float)
-    # Always recalibrate on the final cleaned strip (ignore probe fits).
     fits = fit_all(k, tau, iv)
     adv = two_factor_advantage(fits)
 
     sym_tag = str(meta.get("symbol", ""))
+    plot_outliers_diagnostic(
+        df, removed, ART / "outliers_vs_kept.png", symbol=sym_tag
+    )
     plot_market_surface(df, ART / "market_iv_surface.png")
     plot_smile_fits(df, fits, ART / "model_fits_smiles.png")
     plot_tenor_fits(df, fits, ART / "model_fits_tenors.png")

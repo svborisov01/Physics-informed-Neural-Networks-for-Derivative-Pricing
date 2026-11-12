@@ -27,6 +27,7 @@ def main():
     p.add_argument("--n-pde", type=int, default=3500)
     p.add_argument("--n-boundary", type=int, default=1200)
     p.add_argument("--lr", type=float, default=1e-4)
+    p.add_argument("--print-every", type=int, default=50)
     p.add_argument("--device", default="cpu")
     p.add_argument("--out-dir", default="bergomi2")
     p.add_argument("--checkpoint", default="trained_models/bergomi2.pt")
@@ -66,7 +67,10 @@ def main():
         lr=args.lr,
         sigma_mode="spot_var",
         stationary=True,
-        print_every=50,
+        detach_source=False,
+        relative_bs=True,
+        balance_losses=False,
+        print_every=args.print_every,
         best_model_path=args.checkpoint,
         save_model=True,
     )

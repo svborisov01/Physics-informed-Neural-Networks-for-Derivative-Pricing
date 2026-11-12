@@ -8,10 +8,18 @@
 | Architecture | hidden=96, depth=4, **28 features** |
 | Positivity | softplus β=400 |
 | Baseline | BS with `spot_var` σ_eff |
-| Collocation | N_pde=1500, N_boundary=600 |
-| Epochs | 1500 total (800 + 700 continue) |
-| Best train loss | ≈ **1.07×10⁻³** (epoch 370 of continue phase) |
-| Wall time | ≈ 90 s CPU |
+| PDE loss | **relative to \|L[u_BS]\|** + Huber; λ_pde anneal 0.5→1.0 |
+| Correction gate | corr_scale ≈ 0.18 (mildly wider than 1F) |
+| Collocation | N_pde=2500, N_boundary=1000 |
+| Epochs | 1200 |
+| Best selection loss | ≈ **4.82×10⁻⁴** (epoch 964) |
+| Min relative PDE | ≈ **4.0×10⁻⁴** |
+| Absolute-scaled PDE (post-hoc) | ≈ **8.4×10⁻⁴** (was ≈1.4×10⁻³ on v1) |
+| Wall time | ≈ 98 s CPU |
+
+Relative PDE scaling removes the absolute \|L[u_BS]\| floor under Bergomi
+dynamics so the physics term can keep decreasing; checkpoint selection
+weights terminal/boundary losses so price accuracy is preserved.
 
 Optimal feature list: see `pricing/bergomi2_option_pricing.py` → `FEATURE_NAMES`
 and `bergomi2/README.md`.
@@ -26,14 +34,13 @@ Grid: \(S\in\{80,\ldots,130\}\), \(\tau\in[0.25,1.5]\) (6 mats), MC 40k paths.
 
 | Metric | Value |
 |--------|-------|
-| RMSE | ≈ 0.34 |
-| MAE | ≈ 0.30 |
-| Max \|err\| | ≈ 0.58 |
-| ATM \(T=1\) PINN | 10.00 |
+| RMSE | ≈ 0.39 |
+| MAE | ≈ 0.32 |
+| Max \|err\| | ≈ 0.66 |
+| ATM \(T=1\) PINN | 9.88 |
 | ATM \(T=1\) MC | 10.11 ± 0.04 |
 
-Normalized (\(u=V/K\)): RMSE ≈ 0.0034 — usable first checkpoint; longer training /
-more paths will tighten further.
+Normalized (\(u=V/K\)): RMSE ≈ 0.0039.
 
 ## Artifacts
 
@@ -43,9 +50,12 @@ more paths will tighten further.
 - `test_report.json` — numeric report
 - `vol_smile_richness.png` — stylized smile comparison BS / Heston / 1F / 2F
 - `vol_termstructure_richness.png` — ATM & skew term structures
-- `vol_surface_bs_vs_bergomi2.png` — 3D IV: flat vs two-factor
+- `vol_surface_bs_vs_bergomi2.png` — 3D IV: flat BS vs **U-shaped** 2F smile
+- `vol_smile_bergomi2_short.png` — short-dated smile slices vs flat BS
 
-## Volatility-surface richness (short explanation)
+## Volatility-surface richness
+
+Full prose: see [`../SURFACE_COMPARISON.md`](../SURFACE_COMPARISON.md).
 
 1. **Black–Scholes** — one number \(\sigma\): surface is flat in strike and maturity.
 2. **Heston** — one CIR variance factor: generates skew/smile, but skew dies with

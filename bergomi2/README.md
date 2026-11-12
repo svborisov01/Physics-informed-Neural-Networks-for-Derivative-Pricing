@@ -71,9 +71,22 @@ python scripts/test_bergomi2.py --checkpoint trained_models/bergomi2.pt
 python scripts/plot_vol_surface_richness.py --out-dir bergomi2/artifacts
 ```
 
+## PDE-aware training
+
+The Bergomi operator applied to a pure BS baseline leaves a large absolute
+residual, which used to floor the physics loss around \(10^{-3}\). Training now:
+
+- scales the residual by \(1+|L[u_{\mathrm{BS}}]|\) (detached clone graph),
+- anneals \(\lambda_{\mathrm{pde}}\) from 0.5 → 1.0,
+- uses Huber on the normalized residual,
+- selects checkpoints with extra weight on terminal/boundary terms so a
+  falling PDE score cannot pick an underpriced interior solution.
+
 ## Volatility-surface richness (intuition)
 
-See `artifacts/vol_smile_richness.png` and friends:
+Stylized plots in `artifacts/` (especially `vol_surface_bs_vs_bergomi2.png`
+with a clear U-shaped smile) and the full prose comparison in
+[`SURFACE_COMPARISON.md`](SURFACE_COMPARISON.md):
 
 1. **Black–Scholes** — constant \(\sigma\): flat smile, flat term structure.
 2. **Heston** — one CIR variance factor: skew + smile, but a **single**

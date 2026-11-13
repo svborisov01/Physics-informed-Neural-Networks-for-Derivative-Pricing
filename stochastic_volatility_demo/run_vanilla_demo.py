@@ -29,6 +29,7 @@ ROOT = Path(__file__).resolve().parent
 if str(ROOT.parent) not in sys.path:
     sys.path.insert(0, str(ROOT.parent))
 
+from stochastic_volatility_demo.artifacts_layout import comparison_dir, ensure_layout
 from stochastic_volatility_demo.fetch_market import (
     choose_best_live_for_2f,
     filter_iv_outliers,
@@ -38,6 +39,10 @@ from stochastic_volatility_demo.fit_surfaces import (
     MODEL_FN,
     fit_all,
     two_factor_advantage,
+)
+from stochastic_volatility_demo.greeks_plots import (
+    compute_vanilla_greeks_grid,
+    plot_vanilla_greeks_all,
 )
 
 ART = ROOT / "artifacts"
@@ -538,16 +543,18 @@ def plot_short_long_smile_contrast(
 
 def main(symbol: str | None = "auto"):
     """Default ``auto``: probe live underliers and keep the best real 2F strip."""
-    ART.mkdir(parents=True, exist_ok=True)
+    paths = ensure_layout(ART)
+    common_data, v_cmp, v_data, v_logs = (
+        paths["common_data"],
+        paths["vanilla_comparison"],
+        paths["vanilla_data"],
+        paths["vanilla_logs"],
+    )
     label = symbol if symbol is not None else "auto"
     print(f"Building option surface for {label}…")
 
     if symbol is None or str(symbol).lower() in {"auto", "none", ""}:
         df, meta, _ = choose_best_live_for_2f()
-        df.to_csv(ART / "market_quotes.csv", index=False)
-        df.to_csv(ART / "market_quotes_live.csv", index=False)
-        (ART / "market_meta.json").write_text(json.dumps(meta, indent=2))
-        (ART / "market_meta_live.json").write_text(json.dumps(meta, indent=2))
     else:
         df, meta = load_or_fetch(symbol=symbol)
 
@@ -568,7 +575,6 @@ def main(symbol: str | None = "auto"):
     if meta.get("note"):
         print(f"Note: {meta['note']}")
 
-    # Final gate: iterate until the strip used for scatters is stable/clean.
     removed = list(meta.get("outliers_removed") or [])
     gate_removed = 0
     for _ in range(4):
@@ -581,7 +587,6 @@ def main(symbol: str | None = "auto"):
         removed.extend(final_info["removed"])
         df = df_clean
     else:
-        # Last assignment if we never broke
         df = df_clean
     if gate_removed:
         print(
@@ -597,14 +602,12 @@ def main(symbol: str | None = "auto"):
         meta["outlier_filter"] = of
         meta["outliers_removed"] = removed
     df = df.reset_index(drop=True)
+    df.to_csv(common_data / "market_quotes.csv", index=False)
     df.to_csv(ART / "market_quotes.csv", index=False)
+    (common_data / "market_meta.json").write_text(json.dumps(meta, indent=2))
 
     if removed:
-        pd.DataFrame(removed).to_csv(ART / "outliers_removed.csv", index=False)
-    elif (ART / "outliers_removed.csv").exists():
-        (ART / "outliers_removed.csv").unlink()
-
-    # Sanity: scatter strip must not contain further removable outliers.
+        pd.DataFrame(removed).to_csv(common_data / "outliers_removed.csv", index=False)
     _, check = filter_iv_outliers(
         df, z_max=2.5, max_abs_resid=0.035, max_neighbor_jump=0.05
     )
@@ -620,26 +623,53 @@ def main(symbol: str | None = "auto"):
     adv = two_factor_advantage(fits)
 
     sym_tag = str(meta.get("symbol", ""))
+    spot = float(meta.get("spot") or df["spot"].iloc[0])
+    r = float(meta.get("r", 0.04))
+    q = float(meta.get("q_fallback") or meta.get("q") or 0.005)
+    tenors = sorted(float(t) for t in df["tau"].unique())
+    T = float(tenors[min(len(tenors) - 1, max(1, len(tenors) // 2))])
+    K = round(spot * 1.0, 2)
+
     plot_outliers_diagnostic(
-        df, removed, ART / "outliers_vs_kept.png", symbol=sym_tag
+        df, removed, v_cmp / "outliers_vs_kept.png", symbol=sym_tag
     )
-    plot_market_surface(df, ART / "market_iv_surface.png")
-    plot_smile_fits(df, fits, ART / "model_fits_smiles.png")
-    plot_tenor_fits(df, fits, ART / "model_fits_tenors.png")
-    plot_model_surfaces(df, fits, ART / "model_iv_surfaces_3d.png")
-    plot_surface_slices_grid(df, fits, ART / "model_surfaces_by_tenor.png")
-    plot_errors_by_tenor(fits, ART / "fit_errors_by_tenor.png")
-    plot_errors_by_moneyness(fits, ART / "fit_errors_by_moneyness.png")
-    plot_short_vs_long_advantage(fits, ART / "fit_short_vs_long.png", symbol=sym_tag)
-    plot_residual_heatmaps(df, fits, ART / "model_residuals.png")
+    plot_market_surface(df, v_cmp / "market_iv_surface.png")
+    plot_smile_fits(df, fits, v_cmp / "model_fits_smiles.png")
+    plot_tenor_fits(df, fits, v_cmp / "model_fits_tenors.png")
+    plot_model_surfaces(df, fits, v_cmp / "model_iv_surfaces_3d.png")
+    plot_surface_slices_grid(df, fits, v_cmp / "model_surfaces_by_tenor.png")
+    plot_errors_by_tenor(fits, v_cmp / "fit_errors_by_tenor.png")
+    plot_errors_by_moneyness(fits, v_cmp / "fit_errors_by_moneyness.png")
+    plot_short_vs_long_advantage(fits, v_cmp / "fit_short_vs_long.png", symbol=sym_tag)
+    plot_residual_heatmaps(df, fits, v_cmp / "model_residuals.png")
     plot_short_long_smile_contrast(
-        df, fits, ART / "model_short_long_contrast.png", symbol=sym_tag
+        df, fits, v_cmp / "model_short_long_contrast.png", symbol=sym_tag
     )
+
+    print("\nComputing European call Greeks by model…")
+    greeks_by_model = {}
+    for fr in fits:
+        print(f"  Greeks: {fr.name}")
+        greeks_by_model[fr.name] = compute_vanilla_greeks_grid(
+            fr.name, fr.params, spot, K, T, r, q, n_paths=12_000, n_steps=48, seed=11
+        )
+    plot_vanilla_greeks_all(greeks_by_model, sym_tag, spot, ART)
 
     report = {
         "market": meta,
         "advantage": adv,
         "data": "live_yahoo_mid_implied",
+        "greeks_contract": {"S0": spot, "K": K, "T": T, "r": r, "q": q},
+        "greeks_at_spot": {
+            name: {
+                "price": g["price0"],
+                "delta": g["delta0"],
+                "gamma": g["gamma0"],
+                "theta": g["theta0"],
+                "vega": g["vega0"],
+            }
+            for name, g in greeks_by_model.items()
+        },
         "models": [
             {
                 "name": fr.name,
@@ -660,10 +690,27 @@ def main(symbol: str | None = "auto"):
             for fr in fits
         ],
         "ranking": [fr.name for fr in sorted(fits, key=lambda z: z.rmse)],
+        "layout": {
+            "graphs": str(v_cmp.relative_to(ART)),
+            "model_graphs": "vanilla/graphs/<model>/",
+            "data": str(v_data.relative_to(ART)),
+            "logs": str(v_logs.relative_to(ART)),
+        },
     }
     payload = json.dumps(report, indent=2)
+    (v_data / "fit_report_vanilla.json").write_text(payload)
     (ART / "fit_report_vanilla.json").write_text(payload)
     (ART / "fit_report.json").write_text(payload)
+    (v_logs / "run_summary.txt").write_text(
+        "\n".join(
+            [
+                f"symbol={sym_tag}",
+                f"n_quotes={len(df)}",
+                f"ranking={report['ranking']}",
+                f"greeks_at_spot={json.dumps(report['greeks_at_spot'], indent=2)}",
+            ]
+        )
+    )
 
     print("\nIV fit RMSE (lower is better):")
     for fr in sorted(fits, key=lambda z: z.rmse):
@@ -672,13 +719,17 @@ def main(symbol: str | None = "auto"):
             f"  {fr.name:18s}  RMSE={fr.rmse:.4f}  "
             f"short={fr.rmse_short:.4f}  long={fr.rmse_long:.4f}{hits}"
         )
-        print(f"    params={fr.params}")
+    print("\nEuropean call Greeks at spot:")
+    for name, g in greeks_by_model.items():
+        print(
+            f"  {name:18s}  Δ={g['delta0']:.3f}  Γ={g['gamma0']:.4f}  "
+            f"Θ={g['theta0']:.3f}  Vega={g['vega0']:.3f}"
+        )
     print(
         f"\n2F advantage: rmse_ratio={adv['rmse_ratio']:.2f}×  "
-        f"short={adv['short_ratio']:.2f}×  long={adv['long_ratio']:.2f}×  "
         f"joint={adv['joint_score']:.2f}×"
     )
-    print(f"Wrote artifacts to {ART}")
+    print(f"Wrote artifacts under {ART}/vanilla and {ART}/common")
 
 
 if __name__ == "__main__":

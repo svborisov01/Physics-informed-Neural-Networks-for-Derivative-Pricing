@@ -470,3 +470,146 @@ def price_barrier_grid(
         )
         for i, B in enumerate(barriers)
     ]
+
+
+@dataclass
+class BarrierGreeks:
+    name: str
+    S: np.ndarray
+    price: np.ndarray
+    delta: np.ndarray
+    gamma: np.ndarray
+    theta: np.ndarray
+    vega: np.ndarray
+    spot0: float
+    delta0: float
+    gamma0: float
+    theta0: float
+    vega0: float
+    price0: float
+
+
+def _bump_vol_params(fit_name: str, params: dict, bump: float) -> dict:
+    """Relative bump on the main volatility amplitude parameter(s)."""
+    p = dict(params)
+    if fit_name == "Black–Scholes":
+        p["sigma"] = float(params["sigma"]) * (1.0 + bump)
+    elif fit_name == "Heston-like":
+        p["v0"] = float(params["v0"]) * (1.0 + bump)
+        p["v_inf"] = float(params["v_inf"]) * (1.0 + bump)
+    elif fit_name == "1-factor Bergomi":
+        p["xi0"] = float(params["xi0"]) * (1.0 + bump)
+    elif fit_name == "2-factor Bergomi":
+        p["xi0"] = float(params["xi0"]) * (1.0 + bump)
+    return p
+
+
+def compute_american_barrier_greeks(
+    fit_name: str,
+    params: dict,
+    S0: float,
+    K: float,
+    B: float,
+    T: float,
+    r: float = 0.04,
+    q: float = 0.005,
+    spot_grid: np.ndarray | None = None,
+    n_paths: int = 8_000,
+    n_steps: int = 40,
+    seed: int = 7,
+    dS_rel: float = 0.01,
+    dT: float = 1.0 / 365.0,
+    dVol: float = 0.05,
+) -> BarrierGreeks:
+    """
+    Finite-difference Greeks for the American DAO call under one model.
+
+    Delta / Gamma along a spot grid (barrier must stay below each spot);
+    Theta via maturity bump; Vega via relative bump on the main vol amplitude.
+    """
+    if spot_grid is None:
+        # Stay safely above the barrier
+        lo = max(B * 1.02, S0 * 0.92)
+        hi = S0 * 1.12
+        spot_grid = np.linspace(lo, hi, 11)
+
+    def _price(S, T_, pars, seed_):
+        # Keep barrier fixed in absolute terms; skip spots that would start KO'd
+        if S <= B:
+            return 0.0
+        return price_american_down_out_call(
+            fit_name,
+            pars,
+            S0=float(S),
+            K=K,
+            B=B,
+            T=float(T_),
+            r=r,
+            q=q,
+            n_paths=n_paths,
+            n_steps=n_steps,
+            seed=seed_,
+        ).price
+
+    prices = []
+    deltas = []
+    gammas = []
+    # Common seed across spot/vol/time bumps → correlated MC noise, stabler FD
+    for i, S in enumerate(spot_grid):
+        h = max(dS_rel * S, 1e-4 * S0)
+        # Ensure S-h still above barrier for central differences
+        if S - h <= B:
+            h = 0.5 * (S - B)
+        s_i = seed + 17 * i
+        up = _price(S + h, T, params, s_i)
+        mid = _price(S, T, params, s_i)
+        dn = _price(S - h, T, params, s_i)
+        prices.append(mid)
+        deltas.append((up - dn) / (2.0 * h))
+        gammas.append((up - 2.0 * mid + dn) / (h * h))
+
+    # Spot-centered Theta / Vega at S0
+    h0 = max(dS_rel * S0, 1e-4 * S0)
+    if S0 - h0 <= B:
+        h0 = 0.5 * (S0 - B)
+    s0 = seed
+    p0 = _price(S0, T, params, s0)
+    p_up = _price(S0 + h0, T, params, s0)
+    p_dn = _price(S0 - h0, T, params, s0)
+    delta0 = (p_up - p_dn) / (2.0 * h0)
+    gamma0 = (p_up - 2.0 * p0 + p_dn) / (h0 * h0)
+
+    T_left = max(T - dT, 1e-4)
+    p_tm = _price(S0, T_left, params, s0)
+    # calendar Theta ≈ ∂V/∂t with τ = T-t decreasing → (V(τ-dτ)-V(τ))/dτ
+    theta0 = (p_tm - p0) / dT
+
+    p_vol = _price(S0, T, _bump_vol_params(fit_name, params, dVol), s0)
+    # Vega as dV / d(relative vol bump)
+    vega0 = (p_vol - p0) / dVol
+
+    thetas = []
+    vegas = []
+    for i, S in enumerate(spot_grid):
+        mid = prices[i]
+        s_i = seed + 17 * i
+        p_tm = _price(S, T_left, params, s_i)
+        thetas.append((p_tm - mid) / dT)
+        p_vol = _price(S, T, _bump_vol_params(fit_name, params, dVol), s_i)
+        vegas.append((p_vol - mid) / dVol)
+
+    return BarrierGreeks(
+        name=fit_name,
+        S=np.asarray(spot_grid, float),
+        price=np.asarray(prices, float),
+        delta=np.asarray(deltas, float),
+        gamma=np.asarray(gammas, float),
+        theta=np.asarray(thetas, float),
+        vega=np.asarray(vegas, float),
+        spot0=float(S0),
+        delta0=float(delta0),
+        gamma0=float(gamma0),
+        theta0=float(theta0),
+        vega0=float(vega0),
+        price0=float(p0),
+    )

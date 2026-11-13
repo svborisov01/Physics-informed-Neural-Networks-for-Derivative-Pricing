@@ -32,7 +32,11 @@ ROOT = Path(__file__).resolve().parent
 if str(ROOT.parent) not in sys.path:
     sys.path.insert(0, str(ROOT.parent))
 
-from stochastic_volatility_demo.american_barrier import price_american_down_out_call
+from stochastic_volatility_demo.american_barrier import (
+    compute_american_barrier_greeks,
+    price_american_down_out_call,
+)
+from stochastic_volatility_demo.artifacts_layout import ensure_layout
 from stochastic_volatility_demo.fetch_market import (
     choose_best_live_for_2f,
     filter_iv_outliers,
@@ -43,6 +47,7 @@ from stochastic_volatility_demo.fit_surfaces import (
     fit_all,
     two_factor_advantage,
 )
+from stochastic_volatility_demo.greeks_plots import plot_barrier_greeks_all
 
 ART = ROOT / "artifacts"
 
@@ -69,7 +74,7 @@ def _select_tenors(taus: np.ndarray, n: int = 4) -> list[float]:
     return [float(uniq[i]) for i in idx]
 
 
-def _clean_market(df, meta, art: Path):
+def _clean_market(df, meta, common_data: Path):
     of = meta.get("outlier_filter") or {}
     if of.get("n_removed"):
         print(
@@ -98,9 +103,10 @@ def _clean_market(df, meta, art: Path):
         meta["outlier_filter"] = of
         meta["outliers_removed"] = removed
     df = df.reset_index(drop=True)
-    df.to_csv(art / "market_quotes.csv", index=False)
+    df.to_csv(common_data / "market_quotes.csv", index=False)
+    df.to_csv(ART / "market_quotes.csv", index=False)
     if removed:
-        pd.DataFrame(removed).to_csv(art / "outliers_removed.csv", index=False)
+        pd.DataFrame(removed).to_csv(common_data / "outliers_removed.csv", index=False)
     return df, meta
 
 
@@ -305,7 +311,12 @@ def plot_model_spread(quotes, path: Path, symbol: str):
 
 
 def main(symbol: str | None = "auto"):
-    ART.mkdir(parents=True, exist_ok=True)
+    paths = ensure_layout(ART)
+    common_data = paths["common_data"]
+    b_cmp = paths["barrier_comparison"]
+    b_data = paths["barrier_data"]
+    b_logs = paths["barrier_logs"]
+
     label = symbol if symbol is not None else "auto"
     print(f"=== American barrier demo on {label} ===")
 
@@ -314,7 +325,7 @@ def main(symbol: str | None = "auto"):
     else:
         df, meta = load_or_fetch(symbol=symbol)
 
-    df, meta = _clean_market(df, meta, ART)
+    df, meta = _clean_market(df, meta, common_data)
     sym = str(meta.get("symbol", label))
     spot = float(meta.get("spot") or df["spot"].iloc[0])
     r = float(meta.get("r", 0.04))
@@ -325,7 +336,6 @@ def main(symbol: str | None = "auto"):
         f"n={len(df)} cleaned quotes | tenors={len(meta.get('tenors', []))}"
     )
 
-    # --- 1. Calibrate vanillas ------------------------------------------------
     fits = fit_all(
         df["k"].to_numpy(float),
         df["tau"].to_numpy(float),
@@ -343,11 +353,9 @@ def main(symbol: str | None = "auto"):
         f"rmse_ratio={adv['rmse_ratio']:.2f}×"
     )
 
-    plot_smile_support(df, fits, ART / "vanilla_smiles.png", sym)
-    plot_fit_rmse_bars(fits, ART / "vanilla_fit_rmse.png", sym)
+    plot_smile_support(df, fits, b_cmp / "vanilla_smiles.png", sym)
+    plot_fit_rmse_bars(fits, b_cmp / "vanilla_fit_rmse.png", sym)
 
-    # --- 2. American down-and-out contract ------------------------------------
-    # Slightly OTM call, barrier ~10% below spot, maturity ~ mid surface tenor
     tenors = sorted(float(t) for t in df["tau"].unique())
     T = float(tenors[min(len(tenors) - 1, max(1, len(tenors) // 2))])
     K = round(spot * 1.05, 2)
@@ -379,15 +387,13 @@ def main(symbol: str | None = "auto"):
         print(
             f"    American={qte.price:.4f}±{qte.stderr:.4f}  "
             f"EuroBarrier={qte.european_barrier:.4f}  "
-            f"EuroVanilla={qte.european_vanilla:.4f}  "
             f"KO={qte.knock_prob:.1%}  EEP={qte.early_exercise_premium:.4f}"
         )
 
-    plot_barrier_prices(quotes, ART / "american_barrier_prices.png", sym, contract)
-    plot_american_vs_european(quotes, ART / "american_vs_european_barrier.png", sym)
-    plot_model_spread(quotes, ART / "american_barrier_vs_2f.png", sym)
+    plot_barrier_prices(quotes, b_cmp / "american_barrier_prices.png", sym, contract)
+    plot_american_vs_european(quotes, b_cmp / "american_vs_european_barrier.png", sym)
+    plot_model_spread(quotes, b_cmp / "american_barrier_vs_2f.png", sym)
 
-    # --- 3. Sensitivities -----------------------------------------------------
     barriers = np.linspace(spot * 0.80, spot * 0.95, 5)
     by_fit = {fr.name: fr for fr in fits}
     series_B = {}
@@ -410,7 +416,7 @@ def main(symbol: str | None = "auto"):
             )
             rows.append({"B": float(Bb), "price": qte.price, "knock_prob": qte.knock_prob})
         series_B[name] = rows
-    plot_price_vs_barrier(series_B, ART / "american_barrier_vs_B.png", sym, spot)
+    plot_price_vs_barrier(series_B, b_cmp / "american_barrier_vs_B.png", sym, spot)
 
     mats = np.array(sorted(set([tenors[0], T, tenors[-1]])))
     series_T = {}
@@ -433,9 +439,27 @@ def main(symbol: str | None = "auto"):
             )
             rows.append({"T": float(TT), "price": qte.price, "knock_prob": qte.knock_prob})
         series_T[name] = rows
-    plot_price_vs_maturity(series_T, ART / "american_barrier_vs_T.png", sym)
+    plot_price_vs_maturity(series_T, b_cmp / "american_barrier_vs_T.png", sym)
 
-    # --- Report ---------------------------------------------------------------
+    print("\nComputing American DAO Greeks by model…")
+    greeks_by_model = {}
+    for fr in fits:
+        print(f"  Greeks: {fr.name}")
+        greeks_by_model[fr.name] = compute_american_barrier_greeks(
+            fr.name,
+            fr.params,
+            S0=spot,
+            K=K,
+            B=B,
+            T=T,
+            r=r,
+            q=q,
+            n_paths=10_000,
+            n_steps=40,
+            seed=17,
+        )
+    plot_barrier_greeks_all(greeks_by_model, sym, spot, ART)
+
     report = {
         "exercise": "american_down_and_out_call",
         "note": (
@@ -470,20 +494,53 @@ def main(symbol: str | None = "auto"):
             }
             for q in quotes
         ],
+        "greeks_at_spot": {
+            name: {
+                "price": g.price0,
+                "delta": g.delta0,
+                "gamma": g.gamma0,
+                "theta": g.theta0,
+                "vega": g.vega0,
+            }
+            for name, g in greeks_by_model.items()
+        },
         "price_vs_barrier": series_B,
         "price_vs_maturity": series_T,
         "ranking_vanilla": [fr.name for fr in sorted(fits, key=lambda z: z.rmse)],
         "ranking_exotic": [q.name for q in sorted(quotes, key=lambda z: z.price)],
+        "layout": {
+            "graphs": str(b_cmp.relative_to(ART)),
+            "model_graphs": "barrier/graphs/<model>/",
+            "data": str(b_data.relative_to(ART)),
+            "logs": str(b_logs.relative_to(ART)),
+        },
     }
     payload = json.dumps(report, indent=2)
+    (b_data / "fit_report_barrier.json").write_text(payload)
     (ART / "fit_report_barrier.json").write_text(payload)
     (ART / "fit_report.json").write_text(payload)
-    (ART / "market_meta.json").write_text(json.dumps(meta, indent=2))
+    (common_data / "market_meta.json").write_text(json.dumps(meta, indent=2))
+    (b_logs / "run_summary.txt").write_text(
+        "\n".join(
+            [
+                f"symbol={sym}",
+                f"contract={contract}",
+                f"prices={[(q.name, round(q.price, 4)) for q in quotes]}",
+                f"greeks_at_spot={json.dumps(report['greeks_at_spot'], indent=2)}",
+            ]
+        )
+    )
 
     print("\nAmerican DAO prices (no closed form):")
     for q in sorted(quotes, key=lambda z: -z.price):
         print(f"  {q.name:18s}  {q.price:.4f}  (KO={q.knock_prob:.1%})")
-    print(f"\nWrote artifacts to {ART}")
+    print("\nAmerican DAO Greeks at spot:")
+    for name, g in greeks_by_model.items():
+        print(
+            f"  {name:18s}  Δ={g.delta0:.3f}  Γ={g.gamma0:.4f}  "
+            f"Θ={g.theta0:.3f}  Vega={g.vega0:.3f}"
+        )
+    print(f"\nWrote artifacts under {ART}/barrier and {ART}/common")
 
 
 if __name__ == "__main__":

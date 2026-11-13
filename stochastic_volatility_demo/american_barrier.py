@@ -487,20 +487,134 @@ class BarrierGreeks:
     theta0: float
     vega0: float
     price0: float
+    method: str = "european_ko"
 
 
-def _bump_vol_params(fit_name: str, params: dict, bump: float) -> dict:
-    """Relative bump on the main volatility amplitude parameter(s)."""
+def _bs_vanilla_call(S, K, T, r, q, sigma):
+    from scipy.stats import norm
+
+    S = np.asarray(S, dtype=float)
+    vol = sigma * np.sqrt(T)
+    d1 = (np.log(S / K) + (r - q + 0.5 * sigma * sigma) * T) / vol
+    d2 = d1 - vol
+    return np.exp(-q * T) * S * norm.cdf(d1) - np.exp(-r * T) * K * norm.cdf(d2)
+
+
+def bs_european_down_out_call(S, K, B, T, r, q, sigma):
+    """
+    Closed-form European down-and-out call (Haug), continuous barrier, rebate 0.
+
+    Demo contracts use B < K; that branch is the in–out parity form
+    ``C_do = C_vanilla - C_di``.
+    """
+    from scipy.stats import norm
+
+    S = np.asarray(S, dtype=float)
+    out = np.zeros_like(S, dtype=float)
+    live = S > B
+    if not np.any(live):
+        return out
+
+    Ss = S[live]
+    lam = (r - q + 0.5 * sigma * sigma) / (sigma * sigma)
+    vol = sigma * np.sqrt(T)
+
+    if B <= K:
+        C_van = _bs_vanilla_call(Ss, K, T, r, q, sigma)
+        y = np.log(B * B / (Ss * K)) / vol + lam * vol
+        power = (B / Ss) ** (2.0 * lam)
+        power2 = (B / Ss) ** (2.0 * lam - 2.0)
+        C_di = (
+            np.exp(-q * T) * Ss * power * norm.cdf(y)
+            - np.exp(-r * T) * K * power2 * norm.cdf(y - vol)
+        )
+        C_do = C_van - C_di
+    else:
+        # Haug down-and-out call with H > K
+        x1 = np.log(Ss / B) / vol + lam * vol
+        y = np.log(B / Ss) / vol + lam * vol
+        power = (B / Ss) ** (2.0 * lam)
+        power2 = (B / Ss) ** (2.0 * lam - 2.0)
+        C_do = (
+            Ss * np.exp(-q * T) * norm.cdf(x1)
+            - K * np.exp(-r * T) * norm.cdf(x1 - vol)
+            - Ss * np.exp(-q * T) * power * norm.cdf(y)
+            + K * np.exp(-r * T) * power2 * norm.cdf(y - vol)
+        )
+
+    out[live] = np.maximum(C_do, 0.0)
+    return out
+
+
+def _simulate_paths(fit_name, params, S0, T, r, q, n_paths, n_steps, seed):
+    dyn = dynamics_from_fit(fit_name, params, S0)
+    m = dyn["model"]
+    if m == "bs":
+        return simulate_bs(S0, r, q, dyn["sigma"], T, n_paths, n_steps, seed), dyn
+    if m == "heston":
+        return (
+            simulate_heston(
+                S0, r, q, dyn["v0"], dyn["kappa"], dyn["theta"], dyn["xi"], dyn["rho"],
+                T, n_paths, n_steps, seed,
+            ),
+            dyn,
+        )
+    if m == "bergomi1":
+        return (
+            simulate_bergomi1(
+                S0, r, q, dyn["xi0"], dyn["omega"], dyn["kappa"], dyn["rho"],
+                T, n_paths, n_steps, seed,
+            ),
+            dyn,
+        )
+    return (
+        simulate_bergomi2(
+            S0, r, q, dyn["xi0"], dyn["omega1"], dyn["omega2"], dyn["kappa1"],
+            dyn["kappa2"], dyn["rho1"], dyn["rho2"], dyn["rho12"],
+            T, n_paths, n_steps, seed,
+        ),
+        dyn,
+    )
+
+
+def price_european_down_out_call(
+    fit_name: str,
+    params: dict,
+    S0: float,
+    K: float,
+    B: float,
+    T: float,
+    r: float = 0.04,
+    q: float = 0.005,
+    n_paths: int = 40_000,
+    n_steps: int = 64,
+    seed: int = 0,
+) -> float:
+    """European down-and-out call (discrete monitoring). BS uses closed form."""
+    if S0 <= B:
+        return 0.0
+    if fit_name == "Black–Scholes":
+        sigma = float(params["sigma"])
+        val = bs_european_down_out_call(np.array([S0]), K, B, T, r, q, sigma)
+        return float(np.asarray(val).ravel()[0])
+    S, _ = _simulate_paths(fit_name, params, S0, T, r, q, n_paths, n_steps, seed)
+    alive = _monitor_alive(S, B)
+    price, _ = _european_from_paths(S, alive, K, r, T)
+    return price
+
+
+def _bump_spot_vol_abs(fit_name: str, params: dict, d_sigma: float) -> dict:
     p = dict(params)
     if fit_name == "Black–Scholes":
-        p["sigma"] = float(params["sigma"]) * (1.0 + bump)
+        p["sigma"] = float(params["sigma"]) + d_sigma
     elif fit_name == "Heston-like":
-        p["v0"] = float(params["v0"]) * (1.0 + bump)
-        p["v_inf"] = float(params["v_inf"]) * (1.0 + bump)
-    elif fit_name == "1-factor Bergomi":
-        p["xi0"] = float(params["xi0"]) * (1.0 + bump)
-    elif fit_name == "2-factor Bergomi":
-        p["xi0"] = float(params["xi0"]) * (1.0 + bump)
+        s0 = float(np.sqrt(max(params["v0"], 1e-12)))
+        s_inf = float(np.sqrt(max(params["v_inf"], 1e-12)))
+        p["v0"] = (s0 + d_sigma) ** 2
+        p["v_inf"] = (s_inf + d_sigma) ** 2
+    else:
+        s0 = float(np.sqrt(max(params["xi0"], 1e-12)))
+        p["xi0"] = (s0 + d_sigma) ** 2
     return p
 
 
@@ -514,30 +628,35 @@ def compute_american_barrier_greeks(
     r: float = 0.04,
     q: float = 0.005,
     spot_grid: np.ndarray | None = None,
-    n_paths: int = 8_000,
-    n_steps: int = 40,
+    n_paths: int = 40_000,
+    n_steps: int = 64,
     seed: int = 7,
-    dS_rel: float = 0.01,
-    dT: float = 1.0 / 365.0,
-    dVol: float = 0.05,
+    dS_rel: float = 0.02,
 ) -> BarrierGreeks:
     """
-    Finite-difference Greeks for the American DAO call under one model.
+    Stable Greeks for the down-and-out call under one calibrated model.
 
-    Delta / Gamma along a spot grid (barrier must stay below each spot);
-    Theta via maturity bump; Vega via relative bump on the main vol amplitude.
+    Uses the **European** KO contract for differentiation (American EEP is
+    tiny here; LSMC regression noise otherwise swamps Gamma/Theta). BS uses
+    the closed-form barrier; SV models use CRN Monte Carlo.
+
+    Reported units: Theta per calendar day, Vega per +1 vol point.
     """
     if spot_grid is None:
-        # Stay safely above the barrier
-        lo = max(B * 1.02, S0 * 0.92)
-        hi = S0 * 1.12
-        spot_grid = np.linspace(lo, hi, 11)
+        lo = max(B * 1.05, S0 * 0.85)
+        hi = S0 * 1.20
+        spot_grid = np.linspace(lo, hi, 21)
 
-    def _price(S, T_, pars, seed_):
-        # Keep barrier fixed in absolute terms; skip spots that would start KO'd
+    from scipy.interpolate import UnivariateSpline
+
+    dT = 1.0 / 365.0
+    d_sigma = 0.01  # +1 vol point
+    _ = dS_rel  # retained for API compatibility
+
+    def _price(S, T_, pars):
         if S <= B:
             return 0.0
-        return price_american_down_out_call(
+        return price_european_down_out_call(
             fit_name,
             pars,
             S0=float(S),
@@ -548,68 +667,68 @@ def compute_american_barrier_greeks(
             q=q,
             n_paths=n_paths,
             n_steps=n_steps,
-            seed=seed_,
-        ).price
+            seed=seed,  # common seed across spots / bumps
+        )
 
-    prices = []
-    deltas = []
-    gammas = []
-    # Common seed across spot/vol/time bumps → correlated MC noise, stabler FD
-    for i, S in enumerate(spot_grid):
-        h = max(dS_rel * S, 1e-4 * S0)
-        # Ensure S-h still above barrier for central differences
-        if S - h <= B:
-            h = 0.5 * (S - B)
-        s_i = seed + 17 * i
-        up = _price(S + h, T, params, s_i)
-        mid = _price(S, T, params, s_i)
-        dn = _price(S - h, T, params, s_i)
+    prices, thetas, vegas = [], [], []
+    for S in spot_grid:
+        mid = _price(S, T, params)
         prices.append(mid)
-        deltas.append((up - dn) / (2.0 * h))
-        gammas.append((up - 2.0 * mid + dn) / (h * h))
+        thetas.append(_price(S, max(T - dT, 1e-4), params) - mid)
+        vegas.append(
+            _price(S, T, _bump_spot_vol_abs(fit_name, params, d_sigma)) - mid
+        )
 
-    # Spot-centered Theta / Vega at S0
-    h0 = max(dS_rel * S0, 1e-4 * S0)
-    if S0 - h0 <= B:
-        h0 = 0.5 * (S0 - B)
-    s0 = seed
-    p0 = _price(S0, T, params, s0)
-    p_up = _price(S0 + h0, T, params, s0)
-    p_dn = _price(S0 - h0, T, params, s0)
-    delta0 = (p_up - p_dn) / (2.0 * h0)
-    gamma0 = (p_up - 2.0 * p0 + p_dn) / (h0 * h0)
+    prices = np.asarray(prices, float)
+    thetas = np.asarray(thetas, float)
+    vegas = np.asarray(vegas, float)
+    spot_grid = np.asarray(spot_grid, float)
 
-    T_left = max(T - dT, 1e-4)
-    p_tm = _price(S0, T_left, params, s0)
-    # calendar Theta ≈ ∂V/∂t with τ = T-t decreasing → (V(τ-dτ)-V(τ))/dτ
-    theta0 = (p_tm - p0) / dT
+    if fit_name == "Black–Scholes":
+        # Closed-form prices are already smooth — tiny FD for Δ/Γ
+        h = 0.005 * S0
+        delta = np.array(
+            [(_price(S + h, T, params) - _price(S - h, T, params)) / (2 * h) for S in spot_grid]
+        )
+        gamma = np.array(
+            [
+                (_price(S + h, T, params) - 2 * _price(S, T, params) + _price(S - h, T, params))
+                / (h * h)
+                for S in spot_grid
+            ]
+        )
+        theta, vega = thetas, vegas
+        method = "bs_closed_form"
+    else:
+        s_price = max(1e-8, 0.02 * len(spot_grid) * float(np.var(prices) + 1e-12))
+        price_spl = UnivariateSpline(spot_grid, prices, k=3, s=s_price)
+        prices = np.asarray(price_spl(spot_grid), float)
+        delta = np.asarray(price_spl.derivative(1)(spot_grid), float)
+        gamma = np.asarray(price_spl.derivative(2)(spot_grid), float)
+        s_tv = max(1e-8, 0.05 * len(spot_grid) * float(np.var(thetas) + 1e-12))
+        theta = np.asarray(
+            UnivariateSpline(spot_grid, thetas, k=3, s=s_tv)(spot_grid), float
+        )
+        s_vv = max(1e-8, 0.05 * len(spot_grid) * float(np.var(vegas) + 1e-12))
+        vega = np.asarray(
+            UnivariateSpline(spot_grid, vegas, k=3, s=s_vv)(spot_grid), float
+        )
+        method = "european_ko_mc"
 
-    p_vol = _price(S0, T, _bump_vol_params(fit_name, params, dVol), s0)
-    # Vega as dV / d(relative vol bump)
-    vega0 = (p_vol - p0) / dVol
-
-    thetas = []
-    vegas = []
-    for i, S in enumerate(spot_grid):
-        mid = prices[i]
-        s_i = seed + 17 * i
-        p_tm = _price(S, T_left, params, s_i)
-        thetas.append((p_tm - mid) / dT)
-        p_vol = _price(S, T, _bump_vol_params(fit_name, params, dVol), s_i)
-        vegas.append((p_vol - mid) / dVol)
-
+    i0 = int(np.argmin(np.abs(spot_grid - S0)))
     return BarrierGreeks(
         name=fit_name,
-        S=np.asarray(spot_grid, float),
-        price=np.asarray(prices, float),
-        delta=np.asarray(deltas, float),
-        gamma=np.asarray(gammas, float),
-        theta=np.asarray(thetas, float),
-        vega=np.asarray(vegas, float),
+        S=spot_grid,
+        price=prices,
+        delta=delta,
+        gamma=gamma,
+        theta=theta,
+        vega=vega,
         spot0=float(S0),
-        delta0=float(delta0),
-        gamma0=float(gamma0),
-        theta0=float(theta0),
-        vega0=float(vega0),
-        price0=float(p0),
+        delta0=float(delta[i0]),
+        gamma0=float(gamma[i0]),
+        theta0=float(theta[i0]),
+        vega0=float(vega[i0]),
+        price0=float(prices[i0]),
+        method=method,
     )

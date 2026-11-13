@@ -22,17 +22,18 @@ QMC/MC suites). Full dumps live in `results/metrics.json`.
 strong vol-of-vol 0.51, strong neg. skew 0.59, mild fast MR 0.21, slow MR 0.92,
 near-BS 0.17 — see `results/bergomi/SUMMARY.md`.
 
-Plots and reports: `results/<model>/`.
+Plots and reports: `results/<model>/`. Live SV demos write to `results/sv_demo/`.
 
 ## Stochastic volatility demos
 
 Vanilla surface fits **and** an American down-and-out call (no closed form)
-live side by side — see [`stochastic_volatility_demo/`](stochastic_volatility_demo/):
+live side by side — see [`stochastic_volatility_demo/`](stochastic_volatility_demo/).
+Outputs: [`results/sv_demo/`](results/sv_demo/).
 
 ```bash
 python -m stochastic_volatility_demo.run_demo              # both
-python -m stochastic_volatility_demo.run_vanilla_demo NVDA # smiles / tenors / 3D
-python -m stochastic_volatility_demo.run_barrier_demo NVDA # American DAO call
+python -m stochastic_volatility_demo.run_vanilla_demo NVDA # smiles / tenors / 3D / Greeks
+python -m stochastic_volatility_demo.run_barrier_demo NVDA # American DAO + Greeks
 ```
 
 ## Layout
@@ -42,9 +43,9 @@ python -m stochastic_volatility_demo.run_barrier_demo NVDA # American DAO call
 ├── support_tools/        # load / test / MC / analytics
 ├── scripts/              # CLI train / test / plot entrypoints
 ├── checkpoints/          # active .pt weights (legacy/ for old ones)
-├── results/              # per-model test metrics & plots
+├── results/              # PINN tests + sv_demo/ live market demos
 ├── notebooks/            # demos (+ archive/)
-├── stochastic_volatility_demo/  # vanilla IV fits + American DAO exotic
+├── stochastic_volatility_demo/  # code for vanilla IV + American DAO demos
 ├── README.md
 └── requirements.txt
 ```

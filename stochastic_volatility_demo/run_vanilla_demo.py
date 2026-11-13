@@ -29,7 +29,6 @@ ROOT = Path(__file__).resolve().parent
 if str(ROOT.parent) not in sys.path:
     sys.path.insert(0, str(ROOT.parent))
 
-from stochastic_volatility_demo.artifacts_layout import comparison_dir, ensure_layout
 from stochastic_volatility_demo.fetch_market import (
     choose_best_live_for_2f,
     filter_iv_outliers,
@@ -44,8 +43,9 @@ from stochastic_volatility_demo.greeks_plots import (
     compute_vanilla_greeks_grid,
     plot_vanilla_greeks_all,
 )
+from stochastic_volatility_demo.output_layout import OUT_ROOT, ensure_layout
 
-ART = ROOT / "artifacts"
+OUT = OUT_ROOT
 
 COLORS = {
     "Black–Scholes": "0.35",
@@ -543,13 +543,8 @@ def plot_short_long_smile_contrast(
 
 def main(symbol: str | None = "auto"):
     """Default ``auto``: probe live underliers and keep the best real 2F strip."""
-    paths = ensure_layout(ART)
-    common_data, v_cmp, v_data, v_logs = (
-        paths["common_data"],
-        paths["vanilla_comparison"],
-        paths["vanilla_data"],
-        paths["vanilla_logs"],
-    )
+    paths = ensure_layout(OUT)
+    v_dir = paths["vanilla"]
     label = symbol if symbol is not None else "auto"
     print(f"Building option surface for {label}…")
 
@@ -602,12 +597,11 @@ def main(symbol: str | None = "auto"):
         meta["outlier_filter"] = of
         meta["outliers_removed"] = removed
     df = df.reset_index(drop=True)
-    df.to_csv(common_data / "market_quotes.csv", index=False)
-    df.to_csv(ART / "market_quotes.csv", index=False)
-    (common_data / "market_meta.json").write_text(json.dumps(meta, indent=2))
+    df.to_csv(OUT / "market_quotes.csv", index=False)
+    (OUT / "market_meta.json").write_text(json.dumps(meta, indent=2))
 
     if removed:
-        pd.DataFrame(removed).to_csv(common_data / "outliers_removed.csv", index=False)
+        pd.DataFrame(removed).to_csv(OUT / "outliers_removed.csv", index=False)
     _, check = filter_iv_outliers(
         df, z_max=2.5, max_abs_resid=0.035, max_neighbor_jump=0.05
     )
@@ -631,19 +625,19 @@ def main(symbol: str | None = "auto"):
     K = round(spot * 1.0, 2)
 
     plot_outliers_diagnostic(
-        df, removed, v_cmp / "outliers_vs_kept.png", symbol=sym_tag
+        df, removed, v_dir / "outliers_vs_kept.png", symbol=sym_tag
     )
-    plot_market_surface(df, v_cmp / "market_iv_surface.png")
-    plot_smile_fits(df, fits, v_cmp / "model_fits_smiles.png")
-    plot_tenor_fits(df, fits, v_cmp / "model_fits_tenors.png")
-    plot_model_surfaces(df, fits, v_cmp / "model_iv_surfaces_3d.png")
-    plot_surface_slices_grid(df, fits, v_cmp / "model_surfaces_by_tenor.png")
-    plot_errors_by_tenor(fits, v_cmp / "fit_errors_by_tenor.png")
-    plot_errors_by_moneyness(fits, v_cmp / "fit_errors_by_moneyness.png")
-    plot_short_vs_long_advantage(fits, v_cmp / "fit_short_vs_long.png", symbol=sym_tag)
-    plot_residual_heatmaps(df, fits, v_cmp / "model_residuals.png")
+    plot_market_surface(df, v_dir / "market_iv_surface.png")
+    plot_smile_fits(df, fits, v_dir / "model_fits_smiles.png")
+    plot_tenor_fits(df, fits, v_dir / "model_fits_tenors.png")
+    plot_model_surfaces(df, fits, v_dir / "model_iv_surfaces_3d.png")
+    plot_surface_slices_grid(df, fits, v_dir / "model_surfaces_by_tenor.png")
+    plot_errors_by_tenor(fits, v_dir / "fit_errors_by_tenor.png")
+    plot_errors_by_moneyness(fits, v_dir / "fit_errors_by_moneyness.png")
+    plot_short_vs_long_advantage(fits, v_dir / "fit_short_vs_long.png", symbol=sym_tag)
+    plot_residual_heatmaps(df, fits, v_dir / "model_residuals.png")
     plot_short_long_smile_contrast(
-        df, fits, v_cmp / "model_short_long_contrast.png", symbol=sym_tag
+        df, fits, v_dir / "model_short_long_contrast.png", symbol=sym_tag
     )
 
     print("\nComputing European call Greeks by model…")
@@ -651,15 +645,16 @@ def main(symbol: str | None = "auto"):
     for fr in fits:
         print(f"  Greeks: {fr.name}")
         greeks_by_model[fr.name] = compute_vanilla_greeks_grid(
-            fr.name, fr.params, spot, K, T, r, q, n_paths=12_000, n_steps=48, seed=11
+            fr.name, fr.params, spot, K, T, r, q, n_paths=40_000, n_steps=64, seed=11
         )
-    plot_vanilla_greeks_all(greeks_by_model, sym_tag, spot, ART)
+    plot_vanilla_greeks_all(greeks_by_model, sym_tag, spot, K=K, out_root=OUT)
 
     report = {
         "market": meta,
         "advantage": adv,
         "data": "live_yahoo_mid_implied",
         "greeks_contract": {"S0": spot, "K": K, "T": T, "r": r, "q": q},
+        "greeks_units": {"theta": "per day", "vega": "per +1 vol point"},
         "greeks_at_spot": {
             name: {
                 "price": g["price0"],
@@ -690,27 +685,10 @@ def main(symbol: str | None = "auto"):
             for fr in fits
         ],
         "ranking": [fr.name for fr in sorted(fits, key=lambda z: z.rmse)],
-        "layout": {
-            "graphs": str(v_cmp.relative_to(ART)),
-            "model_graphs": "vanilla/graphs/<model>/",
-            "data": str(v_data.relative_to(ART)),
-            "logs": str(v_logs.relative_to(ART)),
-        },
+        "output": str(OUT.relative_to(ROOT.parent)),
     }
     payload = json.dumps(report, indent=2)
-    (v_data / "fit_report_vanilla.json").write_text(payload)
-    (ART / "fit_report_vanilla.json").write_text(payload)
-    (ART / "fit_report.json").write_text(payload)
-    (v_logs / "run_summary.txt").write_text(
-        "\n".join(
-            [
-                f"symbol={sym_tag}",
-                f"n_quotes={len(df)}",
-                f"ranking={report['ranking']}",
-                f"greeks_at_spot={json.dumps(report['greeks_at_spot'], indent=2)}",
-            ]
-        )
-    )
+    (v_dir / "fit_report.json").write_text(payload)
 
     print("\nIV fit RMSE (lower is better):")
     for fr in sorted(fits, key=lambda z: z.rmse):
@@ -719,17 +697,17 @@ def main(symbol: str | None = "auto"):
             f"  {fr.name:18s}  RMSE={fr.rmse:.4f}  "
             f"short={fr.rmse_short:.4f}  long={fr.rmse_long:.4f}{hits}"
         )
-    print("\nEuropean call Greeks at spot:")
+    print("\nEuropean call Greeks at spot (Θ/day, Vega per +1 vol pt):")
     for name, g in greeks_by_model.items():
         print(
             f"  {name:18s}  Δ={g['delta0']:.3f}  Γ={g['gamma0']:.4f}  "
-            f"Θ={g['theta0']:.3f}  Vega={g['vega0']:.3f}"
+            f"Θ={g['theta0']:.4f}  Vega={g['vega0']:.3f}"
         )
     print(
         f"\n2F advantage: rmse_ratio={adv['rmse_ratio']:.2f}×  "
         f"joint={adv['joint_score']:.2f}×"
     )
-    print(f"Wrote artifacts under {ART}/vanilla and {ART}/common")
+    print(f"Wrote outputs to {OUT}")
 
 
 if __name__ == "__main__":

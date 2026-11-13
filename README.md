@@ -24,14 +24,15 @@ near-BS 0.17 — see `results/bergomi/SUMMARY.md`.
 
 Plots and reports: `results/<model>/`.
 
-## Stochastic volatility demo
+## Stochastic volatility demos
 
-Fit BS / Heston / 1F / **2F Bergomi** on **live** option IVs with honest
-single- vs two-clock calibration — see [`stochastic_volatility_demo/`](stochastic_volatility_demo/):
+Vanilla surface fits **and** an American down-and-out call (no closed form)
+live side by side — see [`stochastic_volatility_demo/`](stochastic_volatility_demo/):
 
 ```bash
-python stochastic_volatility_demo/run_demo.py            # auto: best live 2F strip
-python stochastic_volatility_demo/run_demo.py NVDA       # pin a symbol
+python -m stochastic_volatility_demo.run_demo              # both
+python -m stochastic_volatility_demo.run_vanilla_demo NVDA # smiles / tenors / 3D
+python -m stochastic_volatility_demo.run_barrier_demo NVDA # American DAO call
 ```
 
 ## Layout
@@ -43,7 +44,7 @@ python stochastic_volatility_demo/run_demo.py NVDA       # pin a symbol
 ├── checkpoints/          # active .pt weights (legacy/ for old ones)
 ├── results/              # per-model test metrics & plots
 ├── notebooks/            # demos (+ archive/)
-├── stochastic_volatility_demo/  # market IV fit (2F advantage)
+├── stochastic_volatility_demo/  # vanilla IV fits + American DAO exotic
 ├── README.md
 └── requirements.txt
 ```

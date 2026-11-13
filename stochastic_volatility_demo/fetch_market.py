@@ -13,9 +13,12 @@ from scipy.optimize import brentq
 from scipy.stats import norm
 
 ROOT = Path(__file__).resolve().parent
-ART = ROOT / "artifacts"
-CACHE_CSV = ART / "market_quotes.csv"
-CACHE_META = ART / "market_meta.json"
+REPO_ROOT = ROOT.parent
+OUT = REPO_ROOT / "results" / "sv_demo"
+CACHE_CSV = OUT / "market_quotes.csv"
+CACHE_META = OUT / "market_meta.json"
+# Legacy alias used by older callers
+ART = OUT
 
 # Live underliers probed for the clearest two-clock (short smile + long skew) strip.
 DEFAULT_CANDIDATES = (

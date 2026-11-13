@@ -1,52 +1,59 @@
-# Stochastic volatility demo
+# American barrier demo (no analytical price)
 
-Fit four parametric IV models on **real listed option quotes** and show why
-two Bergomi factors help when the surface has a fast short smile **and** a
-slow long skew.
+Reformulated around an exotic that **has no closed form**: an
+**American down-and-out call**.
 
-1. Black–Scholes (flat σ)
-2. Heston-like (**one** clock shared by ATM / skew / smile)
-3. 1-factor Bergomi (**one** OU clock)
-4. **2-factor Bergomi** (fast + slow OU clocks)
+## Why this exercise
 
-Calibration is honest about clock count: 1F/Heston share a single decay for
-ATM+skew+smile. Residuals are equal-weighted by tenor.
+Vanilla smiles can be fit with parametric IV models. That alone does not
+tell you how to price path-dependent early-exercise claims. Here we:
 
-## IV extraction
+1. **Calibrate** BS / Heston / 1F Bergomi / 2F Bergomi to **live** mid-implied
+   vanilla IVs (honest single- vs two-clock structure)
+2. **Map** each fit to risk-neutral dynamics
+3. **Price** the same American down-and-out call under each dynamics with
+   Longstaff–Schwartz Monte Carlo (discrete knock-out + early exercise)
+4. **Compare** prices, knock-out probabilities, and early-exercise premia
 
-Yahoo’s `impliedVolatility` is **not** used for fitting. Per-expiry forward
-\(F\) comes from put-call parity; IVs are re-implied from mid (else last)
-with moneyness \(k=\log(K/F)\). Wide spreads are dropped. Per-tenor **smile
-outliers** are removed via a robust quadratic fit (MAD z-score, absolute
-residual, and neighbor-jump spikes) before calibration.
+There is no analytical reference price. Model disagreement *is* the result —
+and the 2-factor Bergomi surface (usually the best vanilla fit) is the anchor.
+
+## Contract
+
+Default exotic (from the live spot):
+
+- Call strike \(K \approx 1.05\,S_0\)
+- Down-and-out barrier \(B \approx 0.90\,S_0\)
+- Maturity ≈ median listed tenor
+- American exercise while alive; knocked out if \(S_t \le B\) on the MC grid
 
 ## Run
 
 ```bash
 pip install -r requirements.txt
 python stochastic_volatility_demo/run_demo.py           # auto: best live 2F strip
-python stochastic_volatility_demo/run_demo.py NVDA      # pin a symbol
-python stochastic_volatility_demo/run_demo.py QQQ
+python stochastic_volatility_demo/run_demo.py NVDA
 python stochastic_volatility_demo/run_demo.py ^SPX
 ```
 
-Default `auto` probes NVDA, QQQ, AAPL, MSFT, …, ^SPX and keeps the live
-strip with the strongest joint short+long 2F advantage (all mid-implied).
-Synthetic is **not** used unless you pass `synthetic` explicitly.
-
-Artifacts in `stochastic_volatility_demo/artifacts/`:
+## Artifacts
 
 | File | Content |
 |------|---------|
-| `model_short_long_contrast.png` | Short vs long smile — headline 2F proof |
-| `fit_short_vs_long.png` | Short-tenor vs long-tenor RMSE bars |
-| `model_residuals.png` | Residual heatmaps (Heston / 1F / 2F) |
-| `model_fits_smiles.png` | Smiles across moneyness |
-| `model_fits_tenors.png` | ATM / wing / skew term structures |
-| `model_iv_surfaces_3d.png` | 3D surfaces for all four models |
-| `model_surfaces_by_tenor.png` | Per-model smile grids |
-| `fit_errors_by_tenor.png` | RMSE by maturity |
-| `fit_report.json` | Params, short/long RMSE, candidate probes |
-| `outliers_removed.csv` | Smile outliers dropped before calibration |
-| `outliers_vs_kept.png` | Kept scatter points vs removed outliers (×) |
-| `live_probe.json` | Optional full multi-symbol probe log |
+| `american_barrier_prices.png` | American / European barrier prices + KO prob by model |
+| `american_vs_european_barrier.png` | Early-exercise premium |
+| `american_barrier_vs_2f.png` | Exotic price gap vs 2F anchor |
+| `american_barrier_vs_B.png` | Price vs barrier level |
+| `american_barrier_vs_T.png` | Price vs maturity |
+| `vanilla_smiles.png` | Supporting vanilla calibration |
+| `vanilla_fit_rmse.png` | Vanilla IV RMSE by model |
+| `fit_report.json` | Fits, dynamics maps, exotic prices |
+| `market_quotes.csv` | Cleaned mid-implied vanillas |
+| `outliers_removed.csv` | Dropped smile outliers |
+
+## Modules
+
+- `fetch_market.py` — live Yahoo chains, parity forwards, mid IVs, outlier filter
+- `fit_surfaces.py` — parametric IV models + equal-tenor LS fits
+- `american_barrier.py` — path simulation + LSMC American DAO call
+- `run_demo.py` — end-to-end exercise

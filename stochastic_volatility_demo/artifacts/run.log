@@ -1,17 +1,32 @@
-Building option surface for NVDA…
-Using yahoo_finance | symbol=NVDA | spot=173.72999572753906 | n=110 quotes | tenors=8 | iv=bs_invert_from_mid_else_last | k=log(K/F)
-Yahoo IV MAE vs mid-implied: 0.1223
-Outlier filter (fetch): removed 19 / 267 (kept 110)
+=== American barrier demo on NVDA ===
+Outlier filter (fetch): removed 41 / 280 (kept 111)
+Outlier filter (final): removed 1 more → n=110
+Market: yahoo_finance | NVDA | spot=164.1500 | n=110 cleaned quotes | tenors=8
 
-IV fit RMSE (lower is better):
-  2-factor Bergomi    RMSE=0.0030  short=0.0032  long=0.0026
-    params={'xi0': 0.20278718256994896, 'kappa1': 16.038117801722453, 'kappa2': 2.022481211669551, 'atm1': 0.3969619053061211, 'atm2': 0.08281625181621513, 'skew1': -0.08259069002867671, 'skew2': -0.27004275932711475, 'smile1': 1.02412782601889, 'smile2': 0.3236762539105141}
-  1-factor Bergomi    RMSE=0.0127  short=0.0143  long=0.0099
-    params={'xi0': 0.21489371278959363, 'kappa': 7.928428971099413, 'atm0': 0.3213186290311034, 'skew0': -0.48815688656148204, 'smile0': 1.1719553095786686}
-  Heston-like         RMSE=0.0135  short=0.0153  long=0.0104
-    params={'v0': 0.5923604660491403, 'v_inf': 0.21578600307972867, 'kappa': 8.826367288183, 'skew0': -0.5200154949623295, 'smile0': 1.3041352507120114}
-  Black–Scholes       RMSE=0.0843  short=0.0906  long=0.0741
-    params={'sigma': 0.5352771108368711}
+Vanilla IV RMSE:
+  2-factor Bergomi    RMSE=0.0033  short=0.0037  long=0.0025
+  1-factor Bergomi    RMSE=0.0132  short=0.0136  long=0.0124
+  Heston-like         RMSE=0.0138  short=0.0144  long=0.0127
+  Black–Scholes       RMSE=0.0762  short=0.0808  long=0.0669
+2F vanilla advantage: joint=3.66×  rmse_ratio=3.95×
 
-2F advantage: rmse_ratio=4.26×  short=4.49×  long=3.75×  joint=3.75×
+Exotic: American down-and-out CALL  S0=164.15 K=172.36 B=147.73 T=0.422y  (no analytical price)
+  Pricing under Black–Scholes…
+    American=14.2081±0.2233  EuroBarrier=14.0714  EuroVanilla=19.6850  KO=72.9%  EEP=0.1367
+  Pricing under Heston-like…
+    American=14.4563±0.2224  EuroBarrier=14.5105  EuroVanilla=20.0340  KO=72.2%  EEP=-0.0543
+  Pricing under 1-factor Bergomi…
+    American=12.4891±0.1908  EuroBarrier=12.4437  EuroVanilla=16.2275  KO=66.1%  EEP=0.0454
+  Pricing under 2-factor Bergomi…
+    American=11.1895±0.1656  EuroBarrier=11.2648  EuroVanilla=14.1265  KO=61.1%  EEP=-0.0753
+
+Price vs barrier…
+Price vs maturity…
+
+American DAO prices (no closed form):
+  Heston-like         14.4563  (KO=72.2%)
+  Black–Scholes       14.2081  (KO=72.9%)
+  1-factor Bergomi    12.4891  (KO=66.1%)
+  2-factor Bergomi    11.1895  (KO=61.1%)
+
 Wrote artifacts to /workspace/stochastic_volatility_demo/artifacts

@@ -1,32 +1,57 @@
+================================================================
+VANILLA SURFACE DEMO
+================================================================
+Building option surface for NVDA…
+Using yahoo_finance | symbol=NVDA | spot=163.11000061035156 | n=89 quotes | tenors=8 | iv=bs_invert_from_mid_else_last | k=log(K/F)
+Yahoo IV MAE vs mid-implied: 0.3570
+Outlier filter (fetch): removed 78 / 279 (kept 89)
+Outlier filter (final plot gate): removed 6 more → n=83
+
+IV fit RMSE (lower is better):
+  2-factor Bergomi    RMSE=0.0106  short=0.0136  long=0.0055  hit_bounds=['smile2']
+    params={'xi0': 0.14186448937630886, 'kappa1': 9.580275620416678, 'kappa2': 0.39498330127292774, 'atm1': 0.19817535154251567, 'atm2': 0.12631470037173237, 'skew1': -0.09512729164362506, 'skew2': -0.11825970704930601, 'smile1': 3.03139031310965, 'smile2': 9.050333297005037e-36}
+  1-factor Bergomi    RMSE=0.0160  short=0.0174  long=0.0143
+    params={'xi0': 0.20462523658182394, 'kappa': 5.396823102566915, 'atm0': 0.219314354819033, 'skew0': -0.2608185562252564, 'smile0': 1.9865619266845802}
+  Heston-like         RMSE=0.0162  short=0.0174  long=0.0147
+    params={'v0': 0.44154524606530027, 'v_inf': 0.20525880662614993, 'kappa': 5.8395818245345845, 'skew0': -0.2680938201339148, 'smile0': 2.0995413097768063}
+  Black–Scholes       RMSE=0.0770  short=0.0839  long=0.0684
+    params={'sigma': 0.5268115886318286}
+
+2F advantage: rmse_ratio=1.50×  short=1.27×  long=2.58×  joint=1.27×
+Wrote artifacts to /workspace/stochastic_volatility_demo/artifacts
+
+================================================================
+AMERICAN DOWN-AND-OUT CALL DEMO (no closed form)
+================================================================
 === American barrier demo on NVDA ===
-Outlier filter (fetch): removed 41 / 280 (kept 111)
-Outlier filter (final): removed 1 more → n=110
-Market: yahoo_finance | NVDA | spot=164.1500 | n=110 cleaned quotes | tenors=8
+Outlier filter (fetch): removed 78 / 279 (kept 89)
+Outlier filter (final): removed 6 more → n=83
+Market: yahoo_finance | NVDA | spot=163.1100 | n=83 cleaned quotes | tenors=8
 
 Vanilla IV RMSE:
-  2-factor Bergomi    RMSE=0.0033  short=0.0037  long=0.0025
-  1-factor Bergomi    RMSE=0.0132  short=0.0136  long=0.0124
-  Heston-like         RMSE=0.0138  short=0.0144  long=0.0127
-  Black–Scholes       RMSE=0.0762  short=0.0808  long=0.0669
-2F vanilla advantage: joint=3.66×  rmse_ratio=3.95×
+  2-factor Bergomi    RMSE=0.0106  short=0.0136  long=0.0055
+  1-factor Bergomi    RMSE=0.0160  short=0.0174  long=0.0143
+  Heston-like         RMSE=0.0162  short=0.0174  long=0.0147
+  Black–Scholes       RMSE=0.0770  short=0.0839  long=0.0684
+2F vanilla advantage: joint=1.27×  rmse_ratio=1.50×
 
-Exotic: American down-and-out CALL  S0=164.15 K=172.36 B=147.73 T=0.422y  (no analytical price)
+Exotic: American down-and-out CALL  S0=163.11 K=171.27 B=146.80 T=0.422y  (no analytical price)
   Pricing under Black–Scholes…
-    American=14.2081±0.2233  EuroBarrier=14.0714  EuroVanilla=19.6850  KO=72.9%  EEP=0.1367
+    American=14.1918±0.2235  EuroBarrier=14.0677  EuroVanilla=19.7313  KO=73.1%  EEP=0.1242
   Pricing under Heston-like…
-    American=14.4563±0.2224  EuroBarrier=14.5105  EuroVanilla=20.0340  KO=72.2%  EEP=-0.0543
+    American=14.1332±0.2223  EuroBarrier=14.1372  EuroVanilla=19.7960  KO=71.7%  EEP=-0.0040
   Pricing under 1-factor Bergomi…
-    American=12.4891±0.1908  EuroBarrier=12.4437  EuroVanilla=16.2275  KO=66.1%  EEP=0.0454
+    American=11.7952±0.1775  EuroBarrier=11.8449  EuroVanilla=15.3323  KO=64.0%  EEP=-0.0497
   Pricing under 2-factor Bergomi…
-    American=11.1895±0.1656  EuroBarrier=11.2648  EuroVanilla=14.1265  KO=61.1%  EEP=-0.0753
+    American=7.4564±0.1033  EuroBarrier=7.5035  EuroVanilla=8.2815  KO=43.1%  EEP=-0.0471
 
 Price vs barrier…
 Price vs maturity…
 
 American DAO prices (no closed form):
-  Heston-like         14.4563  (KO=72.2%)
-  Black–Scholes       14.2081  (KO=72.9%)
-  1-factor Bergomi    12.4891  (KO=66.1%)
-  2-factor Bergomi    11.1895  (KO=61.1%)
+  Black–Scholes       14.1918  (KO=73.1%)
+  Heston-like         14.1332  (KO=71.7%)
+  1-factor Bergomi    11.7952  (KO=64.0%)
+  2-factor Bergomi    7.4564  (KO=43.1%)
 
 Wrote artifacts to /workspace/stochastic_volatility_demo/artifacts

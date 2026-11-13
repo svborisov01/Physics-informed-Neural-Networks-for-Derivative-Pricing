@@ -1,59 +1,79 @@
-# American barrier demo (no analytical price)
+# Stochastic volatility demos
 
-Reformulated around an exotic that **has no closed form**: an
-**American down-and-out call**.
+Two companion exercises on the **same live mid-implied vanilla strip**:
 
-## Why this exercise
-
-Vanilla smiles can be fit with parametric IV models. That alone does not
-tell you how to price path-dependent early-exercise claims. Here we:
-
-1. **Calibrate** BS / Heston / 1F Bergomi / 2F Bergomi to **live** mid-implied
-   vanilla IVs (honest single- vs two-clock structure)
-2. **Map** each fit to risk-neutral dynamics
-3. **Price** the same American down-and-out call under each dynamics with
-   Longstaff–Schwartz Monte Carlo (discrete knock-out + early exercise)
-4. **Compare** prices, knock-out probabilities, and early-exercise premia
-
-There is no analytical reference price. Model disagreement *is* the result —
-and the 2-factor Bergomi surface (usually the best vanilla fit) is the anchor.
-
-## Contract
-
-Default exotic (from the live spot):
-
-- Call strike \(K \approx 1.05\,S_0\)
-- Down-and-out barrier \(B \approx 0.90\,S_0\)
-- Maturity ≈ median listed tenor
-- American exercise while alive; knocked out if \(S_t \le B\) on the MC grid
-
-## Run
+| Demo | Entry point | What it shows |
+|------|-------------|---------------|
+| **Vanilla surfaces** | `run_vanilla_demo.py` | BS / Heston / 1F / 2F fits; smile, tenor, 3D, residual plots |
+| **American barrier** | `run_barrier_demo.py` | Same calibrations → price an American down-and-out call (no closed form) |
 
 ```bash
 pip install -r requirements.txt
-python stochastic_volatility_demo/run_demo.py           # auto: best live 2F strip
-python stochastic_volatility_demo/run_demo.py NVDA
-python stochastic_volatility_demo/run_demo.py ^SPX
+
+# both (default)
+python -m stochastic_volatility_demo.run_demo
+python -m stochastic_volatility_demo.run_demo all NVDA
+
+# individually
+python -m stochastic_volatility_demo.run_vanilla_demo NVDA
+python -m stochastic_volatility_demo.run_barrier_demo NVDA
 ```
 
-## Artifacts
+`auto` probes NVDA, QQQ, AAPL, …, ^SPX and keeps the live strip with the
+strongest joint short+long 2F vanilla advantage.
+
+---
+
+## 1. Vanilla surface demo
+
+Honest clock counts: Heston / 1F share **one** decay for ATM+skew+smile; 2F
+has fast + slow OU clocks. Equal tenor weights. Smile outliers filtered before
+fit/plot.
+
+### Vanilla artifacts
 
 | File | Content |
 |------|---------|
-| `american_barrier_prices.png` | American / European barrier prices + KO prob by model |
-| `american_vs_european_barrier.png` | Early-exercise premium |
-| `american_barrier_vs_2f.png` | Exotic price gap vs 2F anchor |
-| `american_barrier_vs_B.png` | Price vs barrier level |
-| `american_barrier_vs_T.png` | Price vs maturity |
-| `vanilla_smiles.png` | Supporting vanilla calibration |
-| `vanilla_fit_rmse.png` | Vanilla IV RMSE by model |
-| `fit_report.json` | Fits, dynamics maps, exotic prices |
-| `market_quotes.csv` | Cleaned mid-implied vanillas |
+| `model_fits_smiles.png` | Smiles across moneyness |
+| `model_fits_tenors.png` | ATM / wing / skew term structures |
+| `model_iv_surfaces_3d.png` | 3D surfaces for all four models |
+| `model_surfaces_by_tenor.png` | Per-model smile grids |
+| `model_short_long_contrast.png` | Short vs long smile proof |
+| `fit_short_vs_long.png` | Short/long RMSE bars |
+| `model_residuals.png` | Residual heatmaps |
+| `fit_errors_by_tenor.png` / `fit_errors_by_moneyness.png` | Error breakdowns |
+| `outliers_vs_kept.png` | Kept vs removed outliers |
 | `outliers_removed.csv` | Dropped smile outliers |
 
-## Modules
+---
 
-- `fetch_market.py` — live Yahoo chains, parity forwards, mid IVs, outlier filter
-- `fit_surfaces.py` — parametric IV models + equal-tenor LS fits
-- `american_barrier.py` — path simulation + LSMC American DAO call
-- `run_demo.py` — end-to-end exercise
+## 2. American barrier demo (no analytical price)
+
+1. Calibrate the four models to live vanillas  
+2. Map each fit → risk-neutral dynamics  
+3. Price the **same** American down-and-out call with Longstaff–Schwartz MC  
+4. Compare prices / knock-out probs / early-exercise premia  
+
+Default contract: \(K\approx 1.05 S_0\), barrier \(B\approx 0.90 S_0\), mid-tenor \(T\).
+
+### Barrier artifacts
+
+| File | Content |
+|------|---------|
+| `american_barrier_prices.png` | American / European barrier + KO by model |
+| `american_vs_european_barrier.png` | Early-exercise premium |
+| `american_barrier_vs_2f.png` | Exotic gap vs 2F anchor |
+| `american_barrier_vs_B.png` | Price vs barrier |
+| `american_barrier_vs_T.png` | Price vs maturity |
+| `vanilla_smiles.png` / `vanilla_fit_rmse.png` | Supporting vanilla calibration |
+
+Reports: `fit_report_vanilla.json`, `fit_report_barrier.json` (and
+`fit_report.json` mirrors whichever demo ran last).
+
+---
+
+## Shared modules
+
+- `fetch_market.py` — Yahoo chains, parity forwards, mid IVs, outlier filter
+- `fit_surfaces.py` — parametric IV models + LS fits
+- `american_barrier.py` — path sims + LSMC American DAO call

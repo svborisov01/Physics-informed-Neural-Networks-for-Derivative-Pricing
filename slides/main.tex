@@ -359,10 +359,11 @@ MC reference & --- & --- & --- & $10.11\pm 0.04$ \\
 \begin{frame}
 \frametitle{Qualitative results: 2-factor price errors}
 \begin{center}
-    \includegraphics[width=0.70\textwidth]{Graphs/abs_err_heatmap.png}
+    \includegraphics[width=0.68\textwidth]{Graphs/abs_err_heatmap.png}
 \end{center}
 \begin{itemize}
-    \item Errors concentrate at high \(S\) and long \(\tau\); which is tolerable as the options are worth a lot for these parameters
+    \item Same \((S,\tau)\) grid and style as the 1-factor heatmap (\(S\in[70,140]\), \(\tau\in[0.25,1.5]\)).
+    \item Dollar RMSE \(0.2030\) \(\Rightarrow\) \(0.0020\) in \(u=V/K\); errors grow at high \(S\) / mid--long \(\tau\).
 \end{itemize}
 \end{frame}
 

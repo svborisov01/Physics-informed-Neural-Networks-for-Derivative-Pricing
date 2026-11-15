@@ -92,18 +92,22 @@ def main():
     with open(out_dir / "test_report.json", "w", encoding="utf-8") as f:
         json.dump(report, f, indent=2)
 
-    # Error heatmap
-    fig, ax = plt.subplots(figsize=(7.2, 4.8), dpi=150)
-    im = ax.pcolormesh(tau, spot, abs_e, shading="auto", cmap="magma")
-    ax.set_xlabel(r"$\tau$")
-    ax.set_ylabel(r"$S$")
-    ax.set_title(
-        f"2F Bergomi |PINN − MC|  RMSE={report['RMSE']:.3f}, Max={report['Max_err']:.3f}"
+    # Coarse-slice heatmap (quick). For the 1F-matched fine grid + style, run
+    # ``scripts/plot_bergomi2_heatmap_1f_grid.py`` instead.
+    from support_tools.bergomi_test_suite import save_heatmap
+
+    save_heatmap(
+        spot,
+        tau,
+        abs_e,
+        title=(
+            "Price-error norm |PINN − MC| on (τ, S)\n"
+            f"Coarse slice — RMSE={report['RMSE']:.4f}, "
+            f"Max={report['Max_err']:.4f}"
+        ),
+        path=out_dir / "abs_err_heatmap_coarse.png",
+        cbar_label="|ΔV| (price norm)",
     )
-    fig.colorbar(im, ax=ax, label="|ΔV|")
-    fig.tight_layout()
-    fig.savefig(out_dir / "abs_err_heatmap.png", bbox_inches="tight")
-    plt.close(fig)
 
     # ATM term structure vs MC
     K = market["K"]

@@ -197,7 +197,7 @@ u_{\mathrm{call}}(x_{\max},\tau,r,\sigma)
 \hline
 Method & RMSE & Max err. & Train & Inf. time \\
 \hline
-PINN & 0.0020 & 0.0030 & 9494 s & 151 $\mu$s \\
+PINN & 0.0022 & 0.0039 & 9494 s & 151 $\mu$s \\
 FD   & 0.0020 & 0.0050 & [n/a] & $1.5\times 10^{7}$ $\mu$s \\
 MC   & 0.0060 & 0.0110 & [n/a] & 21000 $\mu$s \\
 \hline
@@ -274,10 +274,10 @@ MC   & 0.0060 & 0.0110 & [n/a] & 21000 $\mu$s \\
 \begin{block}{Techniques that lead to better training}
 \begin{itemize}
     \item \textbf{Excessive sampling at shorter tenors}: mix uniform $\tau$ with $\mathrm{Beta}(0.5,1.5)$ samples --- short smiles drive most of the residual.
-    \item \textbf{Help from small MC samples} (2-factor): precompute a \emph{36-point} MC price grid ($\sim 25$k paths) and add a soft supervised anchor loss
+    \item \textbf{Help from small QMC samples} (2-factor): precompute a \emph{36-point} scrambled-Sobol' QMC+ADD price grid ($\sim 33$k paths) and add a soft supervised anchor loss
     \[
       \mathcal{L}_{\mathrm{data}}
-      =\mathbb{E}\!\left[\Bigl(\frac{\hat u-u^{\mathrm{MC}}}{1+|u^{\mathrm{MC}}|}\Bigr)^2\right].
+      =\mathbb{E}\!\left[\Bigl(\frac{\hat u-u^{\mathrm{QMC}}}{1+|u^{\mathrm{QMC}}|}\Bigr)^2\right].
     \]
     \item \textbf{Start with depressed $\lambda_{\mathrm{pde}}$}: this helps ``catch'' the boundaries of the problem first, which simplifies further training.
 \end{itemize}
@@ -288,22 +288,29 @@ MC   & 0.0060 & 0.0110 & [n/a] & 21000 $\mu$s \\
 \frametitle{Quantitative results for different models}
 \begin{table}[t]
 \centering
-\caption{Accuracy for different models.}
+\caption{Accuracy for different models (same fine grid; errors in \(u=V/K\)).}
 \label{tab:pricing-comparison-bergomi}
 \begin{tabular}{lcc}
 \hline
  & RMSE & Max $|$err$|$ \\
 \hline
-Heston vs COS & 0.0020 & 0.0030 \\
-Bergomi 1F vs QMC+ADD & 0.0014 & 0.0032 \\
-Bergomi 2F vs MC (PDE only) & 0.0039 & 0.0066 \\
-Bergomi 2F vs MC (+ anchors) & 0.0031 & 0.0059 \\
+Heston vs COS & 0.0022 & 0.0039 \\
+Bergomi 1F vs QMC+ADD & 0.0015 & 0.0030 \\
+Bergomi 2F vs QMC+ADD (PDE only) & 0.0026 & 0.0047 \\
+Bergomi 2F vs QMC+ADD (+ QMC anchors) & 0.0018 & 0.0034 \\
 \hline
 \end{tabular}
 \end{table}
 \begin{itemize}
-    \item Errors are in normalized price \(u=V/K\). Small MC anchors help 2F training, but it is still a bit behind Heston / 1F.
+    \item Small QMC anchors help 2F training, but it is still a bit behind 1F.
 \end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Qualitative results: Heston price errors}
+\begin{center}
+    \includegraphics[width=0.68\textwidth]{Graphs/heatmap_heston.png}
+\end{center}
 \end{frame}
 
 \begin{frame}
@@ -317,12 +324,22 @@ Bergomi 2F vs MC (+ anchors) & 0.0031 & 0.0059 \\
 \end{frame}
 
 \begin{frame}
-\frametitle{Qualitative results: 2-factor price errors}
+\frametitle{Qualitative results: 2-factor price errors (PDE only)}
+\begin{center}
+    \includegraphics[width=0.68\textwidth]{Graphs/abs_err_heatmap_pde_only.png}
+\end{center}
+\begin{itemize}
+    \item Without price anchors the ATM region is systematically underpriced.
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Qualitative results: 2-factor + QMC anchors}
 \begin{center}
     \includegraphics[width=0.68\textwidth]{Graphs/abs_err_heatmap.png}
 \end{center}
 \begin{itemize}
-    \item There is less structure in the errors --- something to work on.
+    \item Soft QMC anchors remove most of the ATM bias; residual structure remains milder.
 \end{itemize}
 \end{frame}
 

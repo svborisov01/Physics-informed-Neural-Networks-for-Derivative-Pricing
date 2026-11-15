@@ -79,7 +79,7 @@
     \item Call options under Heston have only quasi-analytical solution, and more complex financial instruments under this model cannot be solved analytically.
     \item Two standard approaches for solving such advanced problems are Monte-Carlo simulations and grid-based solvers for PDEs.
     \item Both have major downsides: slow convergence ($\mathcal{O}(1/\sqrt{n})$) for MC, curse of dimensionality for grid-based PDE solvers.
-    \item My work is focused on developing and testing new approach for pricing derivatives with special kind of Neural Network.
+    \item My work is focused on developing and testing new approach for pricing derivatives with special kind of Neural Networks.
 \end{itemize}
 \end{frame}
 
@@ -172,7 +172,7 @@ u_{\mathrm{call}}(x_{\max},\tau,r,\sigma)
   \vspace{0.6em}
   \begin{itemize}
     \item \(u_{\mathrm{BS}}\): analytical BS price
-    \item \(U_\theta\): PINN correction for stochastic-vol effects
+    \item \(U_\theta\): PINN correction for stochastic volatility effects
     \item PDE residual enforced on the \emph{total} price \(u_{\mathrm{BS}}+U_\theta\)
   \end{itemize}
 
@@ -192,7 +192,7 @@ u_{\mathrm{call}}(x_{\max},\tau,r,\sigma)
     \begin{table}[t]
 \centering
 \caption{Accuracy and runtime for parametric Heston pricing.}
-\label{tab:pricing-comparison}
+\label{tab:pricing-comparison-heston}
 \begin{tabular}{lcccc}
 \hline
 Method & RMSE & Max err. & Train & Inf. time \\
@@ -285,63 +285,24 @@ MC   & 0.0060 & 0.0110 & [n/a] & 21000 $\mu$s \\
 \end{frame}
 
 \begin{frame}
-\frametitle{Reading the errors: same units as Heston}
-\begin{itemize}
-    \item Heston table reports errors in normalized price \(u=V/K\) (RMSE \(0.0020\), max \(0.0030\)).
-    \item Raw Bergomi dumps in the repo are often in \emph{dollar} price \(V\) at \(K=100\): RMSE \(0.1373\) looks \(\sim 70\times\) worse than Heston, but
-    \[
-      0.1373 / K = 0.0014 \quad\text{in } u=V/K,
-    \]
-    i.e.\ the same order as Heston (slightly better on the baseline fine grid).
-    \item Below, all PINN errors are quoted in \(u=V/K\) to \(10^{-4}\) precision, matching the Heston slide.
-    \item Caveat: Bergomi is harder (lognormal forward variance; 2F has no COS-style closed form) and is scored vs noisy MC / QMC, not vs COS.
-\end{itemize}
-\end{frame}
-
-\begin{frame}
-\frametitle{Quantitative results: 1-factor Bergomi}
-\begin{itemize}
-    \item Checkpoint \texttt{bergomi.pt}; benchmark = scrambled Sobol \textbf{QMC + antithetic differencing (ADD)}.
-    \item Fine grid: errors in normalized price \(u=V/K\) (same as Heston).
-\end{itemize}
+\frametitle{Quantitative results for different models}
 \begin{table}[t]
 \centering
-\begin{tabular}{lcccc}
+\caption{Accuracy for different models.}
+\label{tab:pricing-comparison-bergomi}
+\begin{tabular}{lccc}
 \hline
- & RMSE & MAE & Max $|$err$|$ & Rel.\ RMSE \\
+ & RMSE & Max $|$err$|$ \\
 \hline
-PINN vs QMC+ADD & 0.0014 & 0.0011 & 0.0032 & 0.0610 \\
-Heston PINN (ref.) & 0.0020 & --- & 0.0030 & --- \\
+Heston vs COS & 0.0020 & 0.0030 \\
+Bergomi 1F vs QMC & 0.0014 & 0.0032\\
+Bergomi 2F vs QMC & 0.0039 & 0.0066\\
+Bergomi 2F + MC vs QMC & 0.0031 & 0.0059\\
 \hline
 \end{tabular}
 \end{table}
 \begin{itemize}
-    \item Smile stress tests (abs.\ \(L^\infty\) in \(u\)): baseline 0.0030, strong vol-of-vol 0.0051, strong neg.\ skew 0.0059, mild fast MR 0.0021, slow MR 0.0092, near-BS 0.0017.
-    \item Softplus: \textbf{0} negative prices on the fine grid.
-\end{itemize}
-\end{frame}
-
-\begin{frame}
-\frametitle{Quantitative results: 2-factor Bergomi}
-\begin{itemize}
-    \item Checkpoint \texttt{bergomi2.pt}; fast/slow clocks; scored vs MC (40k paths).
-    \item Errors in normalized price \(u=V/K\) to \(10^{-4}\); ATM column still in dollars (\(K=100\)) for readability.
-\end{itemize}
-\begin{table}[t]
-\centering
-\begin{tabular}{lcccc}
-\hline
-Training & RMSE & MAE & Max $|$err$|$ & ATM $T=1$ \\
-\hline
-PDE only (prior) & $\approx 0.0039$ & $\approx 0.0032$ & $\approx 0.0066$ & 9.88 \\
-+ MC anchors & \textbf{0.0031} & \textbf{0.0026} & \textbf{0.0059} & \textbf{10.29} \\
-MC reference & --- & --- & --- & $10.11\pm 0.04$ \\
-\hline
-\end{tabular}
-\end{table}
-\begin{itemize}
-    \item Same ballpark as Heston (\(0.0020\)); the gap is mostly harder dynamics + MC noise, not a failed PINN.
-    \item Sparse anchors (\(\sim\) 36 points) pin the ATM level; the PDE residual shapes the smile.
+    \item Small MC samples help the training, but the result is still worse than for simpler models.
 \end{itemize}
 \end{frame}
 
@@ -351,8 +312,7 @@ MC reference & --- & --- & --- & $10.11\pm 0.04$ \\
     \includegraphics[width=0.68\textwidth]{Graphs/heatmap_baseline.png}
 \end{center}
 \begin{itemize}
-    \item Heatmap colorbar is dollar \(|\Delta V|\) at \(K=100\); divide by \(100\) to read \(u\)-errors (peak \(\approx 0.0032\)).
-    \item Low-error band near the forward; largest abs.\ errors deep ITM / long \(\tau\).
+    \item Largest errors are at large $S$ and $\tau$ - a tolerable result, given high option prices at these areas.
 \end{itemize}
 \end{frame}
 
@@ -362,8 +322,7 @@ MC reference & --- & --- & --- & $10.11\pm 0.04$ \\
     \includegraphics[width=0.68\textwidth]{Graphs/abs_err_heatmap.png}
 \end{center}
 \begin{itemize}
-    \item Same \((S,\tau)\) grid and style as the 1-factor heatmap (\(S\in[70,140]\), \(\tau\in[0.25,1.5]\)).
-    \item Dollar RMSE \(0.2030\) \(\Rightarrow\) \(0.0020\) in \(u=V/K\); errors grow at high \(S\) / mid--long \(\tau\).
+    \item There is a lot less structure in errors - something to work on.
 \end{itemize}
 \end{frame}
 

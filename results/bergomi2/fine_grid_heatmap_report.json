@@ -1,0 +1,45 @@
+{
+  "checkpoint": "checkpoints/bergomi2.pt",
+  "grid": {
+    "S": [
+      70.0,
+      140.0,
+      2.5,
+      29
+    ],
+    "tau": [
+      0.25,
+      1.5,
+      21
+    ],
+    "n_mc_paths": 40000,
+    "n_mc_steps": 80,
+    "matched_1f_smile_heatmap_grid": true
+  },
+  "market": {
+    "X1": 0.0,
+    "X2": 0.0,
+    "r": 0.05,
+    "xi0": 0.04,
+    "omega1": 1.0,
+    "omega2": 0.6,
+    "kappa1": 4.0,
+    "kappa2": 0.8,
+    "rho1": -0.6,
+    "rho2": -0.3,
+    "rho12": 0.2,
+    "sigma_mode": "flat_fwd",
+    "stationary": true,
+    "K": 100.0
+  },
+  "abs_norms": {
+    "L1": 0.17120780345872272,
+    "L2": 0.2030085141137981,
+    "Linf": 0.4639554434059292,
+    "MAE": 0.17120780345872272,
+    "RMSE": 0.2030085141137981
+  },
+  "mean_mc_stderr": 0.06349034747116329,
+  "max_mc_stderr": 0.15394148250969145,
+  "heatmap": "results/bergomi2/abs_err_heatmap.png"
+}

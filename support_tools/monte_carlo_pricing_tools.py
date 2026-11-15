@@ -911,3 +911,122 @@ def Bergomi2_Monte_Carlo(
     if return_stderr:
         return price, float(disc.std(ddof=1) / np.sqrt(n_paths))
     return price
+
+
+def bergomi2_mc_grid(
+    S_grid,
+    tau_grid,
+    K,
+    r,
+    q,
+    xi0,
+    omega1,
+    omega2,
+    kappa1,
+    kappa2,
+    rho1,
+    rho2,
+    rho12,
+    X1_0=0.0,
+    X2_0=0.0,
+    call_put="Call",
+    n_paths=40_000,
+    n_steps=80,
+    stationary=True,
+    seed=0,
+):
+    """
+    Price a European option on an (S, tau) grid under 2-factor Bergomi.
+
+    For each maturity, one shared path cloud is simulated with S0=1 and then
+    scaled across the spot grid (same trick as ``bergomi_qmc_add_grid``).
+    """
+    S_grid = np.asarray(S_grid, dtype=np.float64)
+    tau_grid = np.asarray(tau_grid, dtype=np.float64)
+    prices = np.empty((S_grid.size, tau_grid.size), dtype=np.float64)
+    stderrs = np.empty_like(prices)
+
+    cp = call_put.lower()
+    if cp not in {"call", "put"}:
+        raise ValueError("call_put must be either 'Call' or 'Put'")
+
+    ss = np.random.SeedSequence(seed)
+    child_seeds = ss.spawn(tau_grid.size)
+    tau_max = max(float(tau_grid.max()), 1e-6)
+
+    for j, tau in enumerate(tau_grid):
+        steps = max(
+            int(round(n_steps * max(float(tau), 1e-6) / tau_max)),
+            16,
+        )
+        seed_j = int(child_seeds[j].generate_state(1)[0])
+        # Simulate multiplicative factors with S0=1
+        # Inline a compact copy of Bergomi2_Monte_Carlo that returns ST/S0.
+        rng = np.random.default_rng(seed_j)
+        dt = float(tau) / steps
+        sqrt_dt = np.sqrt(dt)
+        exp_k1 = np.exp(-kappa1 * dt)
+        exp_k2 = np.exp(-kappa2 * dt)
+        ou_std1 = (
+            np.sqrt(max((1.0 - np.exp(-2.0 * kappa1 * dt)) / (2.0 * kappa1), 0.0))
+            if kappa1 > 1e-12
+            else sqrt_dt
+        )
+        ou_std2 = (
+            np.sqrt(max((1.0 - np.exp(-2.0 * kappa2 * dt)) / (2.0 * kappa2), 0.0))
+            if kappa2 > 1e-12
+            else sqrt_dt
+        )
+        rho12_c = float(np.clip(rho12, -0.999, 0.999))
+        rho12_perp = np.sqrt(max(1.0 - rho12_c * rho12_c, 0.0))
+        denom = max(1.0 - rho12_c * rho12_c, 1e-12)
+        a1 = (rho1 - rho12_c * rho2) / denom
+        a2 = (rho2 - rho12_c * rho1) / denom
+        a_perp = np.sqrt(
+            max(1.0 - a1 * a1 - a2 * a2 - 2.0 * a1 * a2 * rho12_c, 0.0)
+        )
+
+        log_S = np.zeros(n_paths, dtype=np.float64)
+        X1 = np.full(n_paths, float(X1_0), dtype=np.float64)
+        X2 = np.full(n_paths, float(X2_0), dtype=np.float64)
+        t = 0.0
+        for _ in range(steps):
+            v = _v_bergomi2_np(
+                X1,
+                X2,
+                xi0=xi0,
+                omega1=omega1,
+                omega2=omega2,
+                kappa1=kappa1,
+                kappa2=kappa2,
+                rho12=rho12_c,
+                t=t,
+                stationary=stationary,
+            )
+            sqrt_v = np.sqrt(v)
+            z1 = rng.standard_normal(n_paths)
+            z_perp12 = rng.standard_normal(n_paths)
+            z2 = rho12_c * z1 + rho12_perp * z_perp12
+            z_perp_S = rng.standard_normal(n_paths)
+            z_S = a1 * z1 + a2 * z2 + a_perp * z_perp_S
+            X1 = exp_k1 * X1 + ou_std1 * z1
+            X2 = exp_k2 * X2 + ou_std2 * z2
+            log_S = log_S + (r - q - 0.5 * v) * dt + sqrt_v * sqrt_dt * z_S
+            t += dt
+
+        mult = np.exp(log_S)  # ST / S0
+        disc = np.exp(-r * float(tau))
+        for i, S0 in enumerate(S_grid):
+            ST = float(S0) * mult
+            payoff = (
+                np.maximum(ST - K, 0.0) if cp == "call" else np.maximum(K - ST, 0.0)
+            )
+            disc_payoff = disc * payoff
+            prices[i, j] = float(disc_payoff.mean())
+            stderrs[i, j] = (
+                float(disc_payoff.std(ddof=1) / np.sqrt(n_paths))
+                if n_paths > 1
+                else 0.0
+            )
+
+    return prices, stderrs

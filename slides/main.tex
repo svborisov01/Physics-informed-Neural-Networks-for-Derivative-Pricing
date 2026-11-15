@@ -197,9 +197,9 @@ u_{\mathrm{call}}(x_{\max},\tau,r,\sigma)
 \hline
 Method & RMSE & Max err. & Train & Inf. time \\
 \hline
-PINN & 0.002 & 0.003 & 9494 s & 151 $\mu$s \\
-FD   & 0.002 & 0.005 & [n/a] & $1.5\times 10^{7}$ $\mu$s \\
-MC   & 0.006 & 0.011 & [n/a] & 21000 $\mu$s \\
+PINN & 0.0020 & 0.0030 & 9494 s & 151 $\mu$s \\
+FD   & 0.0020 & 0.0050 & [n/a] & $1.5\times 10^{7}$ $\mu$s \\
+MC   & 0.0060 & 0.0110 & [n/a] & 21000 $\mu$s \\
 \hline
 \end{tabular}
 \end{table}
@@ -287,13 +287,13 @@ MC   & 0.006 & 0.011 & [n/a] & 21000 $\mu$s \\
 \begin{frame}
 \frametitle{Reading the errors: same units as Heston}
 \begin{itemize}
-    \item Heston table reports errors in normalized price \(u=V/K\) (RMSE \(0.002\), max \(0.003\)).
-    \item Raw Bergomi dumps in the repo are often in \emph{dollar} price \(V\) at \(K=100\): RMSE \(0.137\) looks \(\sim 70\times\) worse than Heston, but
+    \item Heston table reports errors in normalized price \(u=V/K\) (RMSE \(0.0020\), max \(0.0030\)).
+    \item Raw Bergomi dumps in the repo are often in \emph{dollar} price \(V\) at \(K=100\): RMSE \(0.1373\) looks \(\sim 70\times\) worse than Heston, but
     \[
-      0.137 / K = 0.00137 \quad\text{in } u=V/K,
+      0.1373 / K = 0.0014 \quad\text{in } u=V/K,
     \]
     i.e.\ the same order as Heston (slightly better on the baseline fine grid).
-    \item Below, Bergomi PINN errors are therefore quoted in \(u=V/K\), matching the Heston slide.
+    \item Below, all PINN errors are quoted in \(u=V/K\) to \(10^{-4}\) precision, matching the Heston slide.
     \item Caveat: Bergomi is harder (lognormal forward variance; 2F has no COS-style closed form) and is scored vs noisy MC / QMC, not vs COS.
 \end{itemize}
 \end{frame}
@@ -310,8 +310,8 @@ MC   & 0.006 & 0.011 & [n/a] & 21000 $\mu$s \\
 \hline
  & RMSE & MAE & Max $|$err$|$ & Rel.\ RMSE \\
 \hline
-PINN vs QMC+ADD & 0.0014 & 0.0011 & 0.0032 & 0.061 \\
-Heston PINN (ref.) & 0.002 & --- & 0.003 & --- \\
+PINN vs QMC+ADD & 0.0014 & 0.0011 & 0.0032 & 0.0610 \\
+Heston PINN (ref.) & 0.0020 & --- & 0.0030 & --- \\
 \hline
 \end{tabular}
 \end{table}
@@ -325,7 +325,7 @@ Heston PINN (ref.) & 0.002 & --- & 0.003 & --- \\
 \frametitle{Quantitative results: 2-factor Bergomi}
 \begin{itemize}
     \item Checkpoint \texttt{bergomi2.pt}; fast/slow clocks; scored vs MC (40k paths).
-    \item Errors in normalized price \(u=V/K\); ATM column still in dollars (\(K=100\)) for readability.
+    \item Errors in normalized price \(u=V/K\) to \(10^{-4}\); ATM column still in dollars (\(K=100\)) for readability.
 \end{itemize}
 \begin{table}[t]
 \centering
@@ -340,7 +340,7 @@ MC reference & --- & --- & --- & $10.11\pm 0.04$ \\
 \end{tabular}
 \end{table}
 \begin{itemize}
-    \item Same ballpark as Heston (\(0.002\)); the gap is mostly harder dynamics + MC noise, not a failed PINN.
+    \item Same ballpark as Heston (\(0.0020\)); the gap is mostly harder dynamics + MC noise, not a failed PINN.
     \item Sparse anchors (\(\sim\) 36 points) pin the ATM level; the PDE residual shapes the smile.
 \end{itemize}
 \end{frame}
@@ -351,7 +351,7 @@ MC reference & --- & --- & --- & $10.11\pm 0.04$ \\
     \includegraphics[width=0.68\textwidth]{Graphs/heatmap_baseline.png}
 \end{center}
 \begin{itemize}
-    \item Heatmap colorbar is dollar \(|\Delta V|\) at \(K=100\); divide by \(100\) to read \(u\)-errors (peak \(\approx 0.003\)).
+    \item Heatmap colorbar is dollar \(|\Delta V|\) at \(K=100\); divide by \(100\) to read \(u\)-errors (peak \(\approx 0.0032\)).
     \item Low-error band near the forward; largest abs.\ errors deep ITM / long \(\tau\).
 \end{itemize}
 \end{frame}
@@ -362,7 +362,7 @@ MC reference & --- & --- & --- & $10.11\pm 0.04$ \\
     \includegraphics[width=0.70\textwidth]{Graphs/abs_err_heatmap.png}
 \end{center}
 \begin{itemize}
-    \item Title RMSE \(0.309\) is dollar \(V\); in \(u=V/K\) that is \(0.0031\).
+    \item Title RMSE \(0.3087\) is dollar \(V\); in \(u=V/K\) that is \(0.0031\).
     \item Errors concentrate at high \(S\) and long \(\tau\); ATM strip stays dark (anchors + flat-fwd BS baseline).
 \end{itemize}
 \end{frame}

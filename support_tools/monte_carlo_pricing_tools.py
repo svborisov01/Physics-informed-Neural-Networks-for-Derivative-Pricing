@@ -1030,3 +1030,300 @@ def bergomi2_mc_grid(
             )
 
     return prices, stderrs
+
+
+# ============================================================
+# 2-factor Bergomi QMC + Antithetic Differencing (ADD)
+# ============================================================
+
+
+def _bergomi2_cholesky_coeffs(rho1, rho2, rho12):
+    """
+    Coefficients for correlated factor / spot Gaussians.
+
+    Draw independent z1, z_perp12, z_perp_S ~ N(0,1), then
+      z2 = ρ12 z1 + sqrt(1-ρ12²) z_perp12
+      zS = a1 z1 + a2 z2 + a_perp z_perp_S
+    with Corr(zS, z1)=ρ1, Corr(zS, z2)=ρ2.
+    """
+    rho12 = float(np.clip(rho12, -0.999, 0.999))
+    rho12_perp = np.sqrt(max(1.0 - rho12 * rho12, 0.0))
+    denom = max(1.0 - rho12 * rho12, 1e-12)
+    a1 = (rho1 - rho12 * rho2) / denom
+    a2 = (rho2 - rho12 * rho1) / denom
+    a_perp = np.sqrt(max(1.0 - a1 * a1 - a2 * a2 - 2.0 * a1 * a2 * rho12, 0.0))
+    return rho12, rho12_perp, a1, a2, a_perp
+
+
+def _bergomi2_simulate_from_normals(
+    S0,
+    T,
+    r,
+    q,
+    xi0,
+    omega1,
+    omega2,
+    kappa1,
+    kappa2,
+    rho1,
+    rho2,
+    rho12,
+    z1,
+    z_perp12,
+    z_perp_S,
+    X1_0=0.0,
+    X2_0=0.0,
+    stationary=True,
+):
+    """
+    Simulate 2-factor Bergomi paths given unit normals of shape (n_paths, n_steps).
+
+    Returns
+    -------
+    ST : ndarray (n_paths,)
+    X1T, X2T : ndarray (n_paths,)
+    mult : ndarray (n_paths,)
+        Terminal multiplicative factor ST / S0 (independent of S0).
+    """
+    n_paths, n_steps = z1.shape
+    dt = T / n_steps
+    sqrt_dt = np.sqrt(dt)
+    exp_k1 = np.exp(-kappa1 * dt)
+    exp_k2 = np.exp(-kappa2 * dt)
+    ou_std1 = (
+        np.sqrt(max((1.0 - np.exp(-2.0 * kappa1 * dt)) / (2.0 * kappa1), 0.0))
+        if kappa1 > 1e-12
+        else sqrt_dt
+    )
+    ou_std2 = (
+        np.sqrt(max((1.0 - np.exp(-2.0 * kappa2 * dt)) / (2.0 * kappa2), 0.0))
+        if kappa2 > 1e-12
+        else sqrt_dt
+    )
+    rho12_c, rho12_perp, a1, a2, a_perp = _bergomi2_cholesky_coeffs(rho1, rho2, rho12)
+
+    log_S = np.full(n_paths, np.log(S0), dtype=np.float64)
+    X1 = np.full(n_paths, float(X1_0), dtype=np.float64)
+    X2 = np.full(n_paths, float(X2_0), dtype=np.float64)
+    t = 0.0
+
+    for k in range(n_steps):
+        v = _v_bergomi2_np(
+            X1,
+            X2,
+            xi0=xi0,
+            omega1=omega1,
+            omega2=omega2,
+            kappa1=kappa1,
+            kappa2=kappa2,
+            rho12=rho12_c,
+            t=t,
+            stationary=stationary,
+        )
+        sqrt_v = np.sqrt(v)
+        z2 = rho12_c * z1[:, k] + rho12_perp * z_perp12[:, k]
+        z_S = a1 * z1[:, k] + a2 * z2 + a_perp * z_perp_S[:, k]
+        X1 = exp_k1 * X1 + ou_std1 * z1[:, k]
+        X2 = exp_k2 * X2 + ou_std2 * z2
+        log_S = log_S + (r - q - 0.5 * v) * dt + sqrt_v * sqrt_dt * z_S
+        t += dt
+
+    ST = np.exp(log_S)
+    mult = ST / float(S0)
+    return ST, X1, X2, mult
+
+
+def Bergomi2_QMC_ADD(
+    S0,
+    K,
+    T,
+    r,
+    q,
+    xi0,
+    omega1,
+    omega2,
+    kappa1,
+    kappa2,
+    rho1,
+    rho2,
+    rho12,
+    X1_0=0.0,
+    X2_0=0.0,
+    call_put="Call",
+    n_paths=65_536,
+    n_steps=128,
+    stationary=True,
+    seed=42,
+    return_stderr=False,
+    return_paths=False,
+    return_mult=False,
+):
+    """
+    2-factor Bergomi European pricer via scrambled Sobol' QMC + antithetic
+    differencing (ADD).
+
+    Three independent Sobol' Gaussians drive (Z1, Z_perp12, Z_perp_S) each
+    step; correlations (ρ1, ρ2, ρ12) are applied exactly as in
+    ``Bergomi2_Monte_Carlo``. ``n_paths`` is the total trajectory count after
+    ADD (so ``n_paths // 2`` Sobol' base points). Prefer powers of two.
+    """
+    cp = call_put.lower()
+    if cp not in {"call", "put"}:
+        raise ValueError("call_put must be either 'Call' or 'Put'")
+    if not (-1.0 < rho1 < 1.0 and -1.0 < rho2 < 1.0 and -1.0 < rho12 < 1.0):
+        raise ValueError("rho1, rho2, rho12 must lie strictly inside (-1, 1)")
+
+    n_paths = int(n_paths)
+    if n_paths % 2 != 0:
+        n_paths += 1
+    n_base = n_paths // 2
+    n_steps = int(n_steps)
+
+    if T <= 0.0:
+        intrinsic = max(S0 - K, 0.0) if cp == "call" else max(K - S0, 0.0)
+        mult = np.ones(n_paths, dtype=np.float64)
+        ST = np.full(n_paths, S0, dtype=np.float64)
+        X1T = np.full(n_paths, X1_0, dtype=np.float64)
+        X2T = np.full(n_paths, X2_0, dtype=np.float64)
+        out = [float(intrinsic)]
+        if return_stderr:
+            out.append(0.0)
+        if return_paths:
+            out.append((ST, X1T, X2T))
+        if return_mult:
+            out.append(mult)
+        return out[0] if len(out) == 1 else tuple(out)
+
+    # Three independent Gaussians per time step
+    z = _sobol_standard_normals(n_base, dim=3 * n_steps, seed=seed)
+    z = z.reshape(n_base, n_steps, 3)
+    z = np.concatenate([z, -z], axis=0)  # antithetic differencing
+    z1 = z[:, :, 0]
+    z_perp12 = z[:, :, 1]
+    z_perp_S = z[:, :, 2]
+
+    ST, X1T, X2T, mult = _bergomi2_simulate_from_normals(
+        S0=S0,
+        T=T,
+        r=r,
+        q=q,
+        xi0=xi0,
+        omega1=omega1,
+        omega2=omega2,
+        kappa1=kappa1,
+        kappa2=kappa2,
+        rho1=rho1,
+        rho2=rho2,
+        rho12=rho12,
+        z1=z1,
+        z_perp12=z_perp12,
+        z_perp_S=z_perp_S,
+        X1_0=X1_0,
+        X2_0=X2_0,
+        stationary=stationary,
+    )
+
+    if cp == "call":
+        payoff = np.maximum(ST - K, 0.0)
+    else:
+        payoff = np.maximum(K - ST, 0.0)
+
+    disc_payoff = np.exp(-r * T) * payoff
+    pair_avg = 0.5 * (disc_payoff[:n_base] + disc_payoff[n_base:])
+    price = float(pair_avg.mean())
+
+    out = [price]
+    if return_stderr:
+        stderr = float(pair_avg.std(ddof=1) / np.sqrt(n_base)) if n_base > 1 else 0.0
+        out.append(stderr)
+    if return_paths:
+        out.append((ST, X1T, X2T))
+    if return_mult:
+        out.append(mult)
+    return out[0] if len(out) == 1 else tuple(out)
+
+
+def bergomi2_qmc_add_grid(
+    S_grid,
+    tau_grid,
+    K,
+    r,
+    q,
+    xi0,
+    omega1,
+    omega2,
+    kappa1,
+    kappa2,
+    rho1,
+    rho2,
+    rho12,
+    X1_0=0.0,
+    X2_0=0.0,
+    call_put="Call",
+    n_paths=65_536,
+    n_steps=128,
+    stationary=True,
+    seed=42,
+):
+    """
+    Price on a (S, tau) grid with one QMC+ADD noise field per maturity.
+
+    Terminal multiplier ST/S0 is independent of S0 under log-Euler, so all
+    spots share the same simulated paths for each tau (same as 1F QMC grid).
+    """
+    S_grid = np.asarray(S_grid, dtype=np.float64)
+    tau_grid = np.asarray(tau_grid, dtype=np.float64)
+    prices = np.empty((S_grid.size, tau_grid.size), dtype=np.float64)
+    stderrs = np.empty_like(prices)
+
+    cp = call_put.lower()
+    ss = np.random.SeedSequence(seed)
+    child_seeds = ss.spawn(tau_grid.size)
+    tau_max = max(float(tau_grid.max()), 1e-6)
+
+    for j, tau in enumerate(tau_grid):
+        steps = max(
+            int(round(n_steps * max(float(tau), 1e-6) / tau_max)),
+            16,
+        )
+        _price0, se0, mult = Bergomi2_QMC_ADD(
+            S0=1.0,
+            K=K,
+            T=float(tau),
+            r=r,
+            q=q,
+            xi0=xi0,
+            omega1=omega1,
+            omega2=omega2,
+            kappa1=kappa1,
+            kappa2=kappa2,
+            rho1=rho1,
+            rho2=rho2,
+            rho12=rho12,
+            X1_0=X1_0,
+            X2_0=X2_0,
+            call_put=call_put,
+            n_paths=n_paths,
+            n_steps=steps,
+            stationary=stationary,
+            seed=int(child_seeds[j].generate_state(1)[0]),
+            return_stderr=True,
+            return_mult=True,
+        )
+        n_base = mult.size // 2
+        disc = np.exp(-r * float(tau))
+        for i, S0 in enumerate(S_grid):
+            ST = float(S0) * mult
+            if cp == "call":
+                payoff = np.maximum(ST - K, 0.0)
+            else:
+                payoff = np.maximum(K - ST, 0.0)
+            disc_payoff = disc * payoff
+            pair_avg = 0.5 * (disc_payoff[:n_base] + disc_payoff[n_base:])
+            prices[i, j] = float(pair_avg.mean())
+            stderrs[i, j] = (
+                float(pair_avg.std(ddof=1) / np.sqrt(n_base)) if n_base > 1 else 0.0
+            )
+        _ = (_price0, se0)
+
+    return prices, stderrs

@@ -16,14 +16,15 @@ _ROOT = Path(__file__).resolve().parents[1]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from pricing.bergomi2_option_pricing import FEATURE_NAMES, PINN, train_network
+from pricing.bergomi2_option_pricing import PINN, train_network
 
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--epochs", type=int, default=2500)
+    p.add_argument("--epochs", type=int, default=1400)
     p.add_argument("--hidden", type=int, default=96)
     p.add_argument("--depth", type=int, default=4)
+    p.add_argument("--feature-set", default="v1b", choices=["v1", "v1b", "v2"])
     p.add_argument("--n-pde", type=int, default=3500)
     p.add_argument("--n-boundary", type=int, default=1200)
     p.add_argument("--lr", type=float, default=1e-4)
@@ -31,6 +32,13 @@ def main():
     p.add_argument("--device", default="cpu")
     p.add_argument("--out-dir", default="results/bergomi2")
     p.add_argument("--checkpoint", default="checkpoints/bergomi2.pt")
+    p.add_argument(
+        "--anchor-method",
+        default="qmc_add",
+        choices=["qmc_add", "mc", "none"],
+        help="Supervised training-aid pricer (qmc_add / mc) or none",
+    )
+    p.add_argument("--anchor-paths", type=int, default=32_768)
     args = p.parse_args()
 
     out_dir = Path(args.out_dir)
@@ -51,13 +59,15 @@ def main():
         call_put="Call",
         hidden=args.hidden,
         depth=args.depth,
+        feature_set=args.feature_set,
         v_max=1.0,
         kappa_floor=0.25,
     ).to(device)
 
-    print(f"Features ({len(FEATURE_NAMES)}): {FEATURE_NAMES}")
+    print(f"Feature set={args.feature_set} ({len(pinn.feature_names)}): {pinn.feature_names}")
     print(f"Params: {sum(p.numel() for p in pinn.parameters()):,}")
 
+    use_anchor = args.anchor_method != "none"
     history = train_network(
         pinn,
         N_pde=args.n_pde,
@@ -69,8 +79,10 @@ def main():
         detach_source=False,
         relative_bs=True,
         balance_losses=False,
-        use_mc_anchor=True,
-        lambda_data=2.0,
+        use_mc_anchor=use_anchor,
+        mc_anchor_method=args.anchor_method if use_anchor else "qmc_add",
+        mc_anchor_paths=args.anchor_paths,
+        lambda_data=2.0 if use_anchor else 0.0,
         print_every=args.print_every,
         best_model_path=args.checkpoint,
         save_model=True,
@@ -83,7 +95,8 @@ def main():
         for k, v in history.items()
         if k != "feature_names"
     }
-    serializable["feature_names"] = FEATURE_NAMES
+    serializable["feature_names"] = list(pinn.feature_names)
+    serializable["feature_set"] = args.feature_set
     with open(hist_path, "w", encoding="utf-8") as f:
         json.dump(serializable, f, indent=2)
 

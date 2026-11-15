@@ -23,7 +23,10 @@ if str(_ROOT) not in sys.path:
 
 from support_tools.bergomi_test_suite import error_norms, save_heatmap
 from support_tools.model_wrapper import load_model, predict_price
-from support_tools.monte_carlo_pricing_tools import bergomi2_mc_grid
+from support_tools.monte_carlo_pricing_tools import (
+    bergomi2_mc_grid,
+    bergomi2_qmc_add_grid,
+)
 
 
 def pinn_price_grid_2f(pinn, S_grid, tau_grid, K: float, market: dict) -> np.ndarray:
@@ -64,8 +67,14 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--checkpoint", default="checkpoints/bergomi2.pt")
     p.add_argument("--out-dir", default="results/bergomi2")
-    p.add_argument("--n-mc-paths", type=int, default=40_000)
-    p.add_argument("--n-mc-steps", type=int, default=80)
+    p.add_argument("--n-mc-paths", type=int, default=65_536)
+    p.add_argument("--n-mc-steps", type=int, default=128)
+    p.add_argument(
+        "--method",
+        default="qmc_add",
+        choices=["qmc_add", "mc"],
+        help="Reference pricer for the heatmap",
+    )
     p.add_argument("--device", default="cpu")
     p.add_argument(
         "--also-slides",
@@ -108,7 +117,9 @@ def main():
     )
 
     t0 = time.time()
-    mc, se = bergomi2_mc_grid(
+    grid_fn = bergomi2_qmc_add_grid if args.method == "qmc_add" else bergomi2_mc_grid
+    ref_label = "QMC+ADD" if args.method == "qmc_add" else "MC"
+    mc, se = grid_fn(
         S_grid=S_grid,
         tau_grid=tau_grid,
         K=market["K"],
@@ -129,7 +140,7 @@ def main():
         stationary=market["stationary"],
         seed=0,
     )
-    print(f"MC grid done in {time.time() - t0:.1f}s")
+    print(f"{ref_label} grid done in {time.time() - t0:.1f}s")
 
     t1 = time.time()
     pinn_p = pinn_price_grid_2f(pinn, S_grid, tau_grid, market["K"], market)
@@ -144,7 +155,7 @@ def main():
         tau_grid,
         abs_err,
         title=(
-            "Price-error norm |PINN − MC| on (τ, S)\n"
+            f"Price-error norm |PINN − {ref_label}| on (τ, S)\n"
             f"Smile params — {title_fragment(market)}"
         ),
         path=heat_path,

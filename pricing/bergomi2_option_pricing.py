@@ -30,8 +30,8 @@ PDE residual (stationary, q = 0):
     + ρ1 √v u_{x X1} + ρ2 √v u_{x X2}
     - r u  = 0
 
-Feature set (28): dual-factor OU state, both timescales, log-variance drive,
-mean-reversion clocks, and key cross terms — see FEATURE_NAMES.
+Feature set: dual-factor OU state, both timescales, log-variance drive,
+mean-reversion clocks, skew proxies, and key cross terms — see FEATURE_NAMES.
 """
 
 from __future__ import annotations
@@ -53,7 +53,7 @@ np.random.seed(42)
 
 DEFAULT_PRICE_SOFTPLUS_BETA = 400.0
 
-FEATURE_NAMES = [
+FEATURE_NAMES_V1 = [
     "x_norm",
     "X1_norm",
     "X2_norm",
@@ -83,6 +83,44 @@ FEATURE_NAMES = [
     "X1_X2",
     "cp_feat",
 ]
+
+# Curated extras: timescale + skew/smile interactions (avoid diluting the trunk).
+FEATURE_NAMES_V1B_EXTRA = [
+    "sqrt_tau",
+    "kappa_ratio",
+    "skew_fast",
+    "skew_slow",
+    "x_mr_fast",
+    "x_mr_slow",
+]
+
+FEATURE_NAMES_V2_EXTRA = FEATURE_NAMES_V1B_EXTRA + [
+    "inv_sqrt_tau",
+    "sqrt_xi0",
+    "omega_share",
+    "x_log_v",
+    "X1_tau",
+    "X2_tau",
+]
+
+FEATURE_SETS = {
+    "v1": FEATURE_NAMES_V1,
+    "v1b": FEATURE_NAMES_V1 + FEATURE_NAMES_V1B_EXTRA,
+    "v2": FEATURE_NAMES_V1 + FEATURE_NAMES_V2_EXTRA,
+}
+
+# Default training / export feature map (hillclimb may override per run).
+DEFAULT_FEATURE_SET = "v1b"
+FEATURE_NAMES = list(FEATURE_SETS[DEFAULT_FEATURE_SET])
+
+
+def resolve_feature_names(feature_set: str | None = None, feature_names=None):
+    if feature_names is not None:
+        return list(feature_names)
+    key = (feature_set or DEFAULT_FEATURE_SET).lower()
+    if key not in FEATURE_SETS:
+        raise ValueError(f"Unknown feature_set={feature_set!r}; choose from {sorted(FEATURE_SETS)}")
+    return list(FEATURE_SETS[key])
 
 
 def _soft_positive_price(u, beta: float = DEFAULT_PRICE_SOFTPLUS_BETA):
@@ -705,7 +743,7 @@ class PINN(nn.Module):
 
         u ~= softplus_β( u_BS + U(x, X1, X2, τ, params) )
 
-    Optimal 28-feature map documented in FEATURE_NAMES / results/results/bergomi2/README.md.
+    Feature map documented in FEATURE_NAMES (v1 core + v2 engineered terms).
     Distinguishing attributes: X1_max, X2_max (vs X_max for 1-factor).
     """
 
@@ -726,6 +764,8 @@ class PINN(nn.Module):
         v_max=1.0,
         kappa_floor=0.25,
         price_softplus_beta=DEFAULT_PRICE_SOFTPLUS_BETA,
+        feature_set: str | None = None,
+        feature_names=None,
     ):
         super().__init__()
         self.x_min = float(x_min)
@@ -742,15 +782,19 @@ class PINN(nn.Module):
         self.kappa_floor = float(kappa_floor)
         self.price_softplus_beta = float(price_softplus_beta)
         self.call_put = call_put
-        self.depth = depth
-        self.hidden = hidden
+        self.depth = int(depth)
+        self.hidden = int(hidden)
         self.n_factors = 2
+        self.feature_set = (feature_set or DEFAULT_FEATURE_SET).lower()
+        self.feature_names = resolve_feature_names(
+            feature_set=self.feature_set, feature_names=feature_names
+        )
 
-        input_dim = len(FEATURE_NAMES)
-        layers = [nn.Linear(input_dim, hidden), nn.Tanh()]
-        for _ in range(depth - 1):
-            layers += [nn.Linear(hidden, hidden), nn.Tanh()]
-        layers += [nn.Linear(hidden, 1)]
+        input_dim = len(self.feature_names)
+        layers = [nn.Linear(input_dim, self.hidden), nn.Tanh()]
+        for _ in range(self.depth - 1):
+            layers += [nn.Linear(self.hidden, self.hidden), nn.Tanh()]
+        layers += [nn.Linear(self.hidden, 1)]
         self.net = nn.Sequential(*layers)
 
     def _cp_feature(self, x):
@@ -818,39 +862,66 @@ class PINN(nn.Module):
         X1_X2 = X1_norm * X2_norm
         cp_feat = self._cp_feature(x)
 
-        return torch.cat(
-            [
-                x_norm,
-                X1_norm,
-                X2_norm,
-                tau_norm,
-                r_norm,
-                xi0_norm,
-                omega1_norm,
-                omega2_norm,
-                kappa1_norm,
-                kappa2_norm,
-                rho1,
-                rho2,
-                rho12,
-                tau_sq,
-                tau_sin,
-                tau_cos,
-                log_v_drive_norm,
-                mr_fast,
-                mr_slow,
-                x_sq,
-                abs_x,
-                X1_sq,
-                X2_sq,
-                x_tau,
-                x_X1,
-                x_X2,
-                X1_X2,
-                cp_feat,
-            ],
-            dim=1,
-        )
+        sqrt_tau = torch.sqrt(tau_norm.clamp_min(1e-8))
+        inv_sqrt_tau = 1.0 / sqrt_tau
+        sqrt_xi0 = torch.sqrt(xi0_norm.clamp_min(1e-8))
+        kappa_ratio = k1 / (k1 + k2)
+        omega_share = omega1.abs() / (omega1.abs() + omega2.abs() + 1e-6)
+        skew_fast = rho1 * omega1_norm
+        skew_slow = rho2 * omega2_norm
+        x_mr_fast = x_norm * mr_fast
+        x_mr_slow = x_norm * mr_slow
+        x_log_v = x_norm * log_v_drive_norm
+        X1_tau = X1_norm * tau_norm
+        X2_tau = X2_norm * tau_norm
+
+        feat_map = {
+            "x_norm": x_norm,
+            "X1_norm": X1_norm,
+            "X2_norm": X2_norm,
+            "tau_norm": tau_norm,
+            "r_norm": r_norm,
+            "xi0_norm": xi0_norm,
+            "omega1_norm": omega1_norm,
+            "omega2_norm": omega2_norm,
+            "kappa1_norm": kappa1_norm,
+            "kappa2_norm": kappa2_norm,
+            "rho1": rho1,
+            "rho2": rho2,
+            "rho12": rho12,
+            "tau_sq": tau_sq,
+            "tau_sin": tau_sin,
+            "tau_cos": tau_cos,
+            "log_v_drive_norm": log_v_drive_norm,
+            "mr_fast": mr_fast,
+            "mr_slow": mr_slow,
+            "x_sq": x_sq,
+            "abs_x": abs_x,
+            "X1_sq": X1_sq,
+            "X2_sq": X2_sq,
+            "x_tau": x_tau,
+            "x_X1": x_X1,
+            "x_X2": x_X2,
+            "X1_X2": X1_X2,
+            "cp_feat": cp_feat,
+            "sqrt_tau": sqrt_tau,
+            "inv_sqrt_tau": inv_sqrt_tau,
+            "sqrt_xi0": sqrt_xi0,
+            "kappa_ratio": kappa_ratio,
+            "omega_share": omega_share,
+            "skew_fast": skew_fast,
+            "skew_slow": skew_slow,
+            "x_mr_fast": x_mr_fast,
+            "x_mr_slow": x_mr_slow,
+            "x_log_v": x_log_v,
+            "X1_tau": X1_tau,
+            "X2_tau": X2_tau,
+        }
+        names = getattr(self, "feature_names", FEATURE_NAMES)
+        missing = [n for n in names if n not in feat_map]
+        if missing:
+            raise KeyError(f"Unknown Bergomi2 features: {missing}")
+        return torch.cat([feat_map[n] for n in names], dim=1)
 
     def forward_x(
         self,
@@ -1018,15 +1089,23 @@ class PINN(nn.Module):
 def _build_mc_anchor_batch(
     device,
     dtype,
-    n_paths: int = 25_000,
+    n_paths: int = 32_768,
     n_steps: int = 64,
     seed: int = 7,
+    method: str = "qmc_add",
 ):
     """
-    Precompute a small MC price table on the evaluation market
+    Precompute a small price table on the evaluation market
     (X1=X2=0, ξ0=0.04, …) used as a soft supervised anchor.
+
+    ``method`` is ``\"qmc_add\"`` (default; scrambled Sobol' + antithetic
+    differencing) or ``\"mc\"`` (plain Monte Carlo).
     """
-    from support_tools.monte_carlo_pricing_tools import Bergomi2_Monte_Carlo
+    from support_tools.monte_carlo_pricing_tools import (
+        Bergomi2_Monte_Carlo,
+        bergomi2_mc_grid,
+        bergomi2_qmc_add_grid,
+    )
 
     K = 100.0
     S_grid = np.array([80.0, 90.0, 100.0, 110.0, 120.0, 130.0], dtype=np.float64)
@@ -1043,22 +1122,43 @@ def _build_mc_anchor_batch(
         rho2=-0.3,
         rho12=0.2,
     )
+    method = str(method).lower()
+    grid_kw = dict(
+        S_grid=S_grid,
+        tau_grid=tau_grid,
+        K=K,
+        n_paths=n_paths,
+        n_steps=n_steps,
+        stationary=True,
+        seed=seed,
+        **market,
+    )
+    if method in {"qmc_add", "qmc", "add"}:
+        prices, _se = bergomi2_qmc_add_grid(**grid_kw)
+    elif method in {"mc", "monte_carlo"}:
+        prices, _se = bergomi2_mc_grid(**grid_kw)
+    else:
+        # Fallback: pointwise MC (legacy path)
+        prices = np.empty((S_grid.size, tau_grid.size), dtype=np.float64)
+        for j, tau in enumerate(tau_grid):
+            for i, S in enumerate(S_grid):
+                prices[i, j] = Bergomi2_Monte_Carlo(
+                    S0=float(S),
+                    K=K,
+                    T=float(tau),
+                    n_paths=n_paths,
+                    n_steps=n_steps,
+                    seed=seed + int(1000 * tau) + int(S),
+                    return_stderr=False,
+                    **market,
+                )
+
     S_list, tau_list, u_list = [], [], []
-    for tau in tau_grid:
-        for S in S_grid:
-            price = Bergomi2_Monte_Carlo(
-                S0=float(S),
-                K=K,
-                T=float(tau),
-                n_paths=n_paths,
-                n_steps=n_steps,
-                seed=seed + int(1000 * tau) + int(S),
-                return_stderr=False,
-                **market,
-            )
-            S_list.append(S)
-            tau_list.append(tau)
-            u_list.append(float(price) / K)
+    for j, tau in enumerate(tau_grid):
+        for i, S in enumerate(S_grid):
+            S_list.append(float(S))
+            tau_list.append(float(tau))
+            u_list.append(float(prices[i, j]) / K)
 
     def _col(vals):
         return torch.tensor(vals, device=device, dtype=dtype).view(-1, 1)
@@ -1095,6 +1195,11 @@ def _build_mc_anchor_batch(
         ),
         "market": market,
         "K_scalar": K,
+        "method": (
+            "qmc_add"
+            if method in {"qmc_add", "qmc", "add"}
+            else "mc"
+        ),
     }
     return batch
 
@@ -1142,7 +1247,9 @@ def train_network(
     detach_source: bool = False,
     relative_bs: bool = True,
     use_mc_anchor: bool = True,
-    mc_anchor_paths: int = 25_000,
+    mc_anchor_paths: int = 32_768,
+    mc_anchor_method: str = "qmc_add",
+    mc_anchor_batch=None,
     grad_clip=1.0,
     print_every=100,
     best_model_path="checkpoints/bergomi2.pt",
@@ -1155,9 +1262,12 @@ def train_network(
 
     - ``lambda_pde`` anneals from ``lambda_pde_start`` → ``lambda_pde_end``.
     - ``relative_bs`` removes the absolute |L[u_BS]| floor.
-    - ``use_mc_anchor`` adds a soft supervised loss on a precomputed MC grid
+    - ``use_mc_anchor`` adds a soft supervised loss on a precomputed price grid
       for the evaluation market — this corrects the ATM underpricing that pure
       PDE training left behind without needing thousands more epochs.
+    - ``mc_anchor_method`` selects the anchor pricer: ``\"qmc_add\"`` (default)
+      or ``\"mc\"``.
+    - ``mc_anchor_batch`` reuses a precomputed anchor dict (skips rebuild).
     - Default ``sigma_mode='flat_fwd'`` keeps the BS baseline near the right
       ATM level so U only learns the true Bergomi correction.
     """
@@ -1171,15 +1281,35 @@ def train_network(
     )
 
     anchor = None
+    anchor_method = str(mc_anchor_method).lower()
     if use_mc_anchor and float(lambda_data) > 0.0:
-        print(
-            f"Building MC anchor grid (n_paths={mc_anchor_paths})…",
-            flush=True,
-        )
-        anchor = _build_mc_anchor_batch(
-            device, dtype, n_paths=mc_anchor_paths, n_steps=64, seed=7
-        )
-        print(f"MC anchor points: {int(anchor['u_mc'].shape[0])}", flush=True)
+        if mc_anchor_batch is not None:
+            anchor = mc_anchor_batch
+            anchor_method = str(anchor.get("method", anchor_method)).lower()
+            print(
+                f"Reusing {anchor_method} anchor grid "
+                f"({int(anchor['u_mc'].shape[0])} pts)…",
+                flush=True,
+            )
+        else:
+            print(
+                f"Building {anchor_method} anchor grid "
+                f"(n_paths={mc_anchor_paths})…",
+                flush=True,
+            )
+            anchor = _build_mc_anchor_batch(
+                device,
+                dtype,
+                n_paths=mc_anchor_paths,
+                n_steps=64,
+                seed=7,
+                method=anchor_method,
+            )
+            print(
+                f"Anchor points: {int(anchor['u_mc'].shape[0])} "
+                f"(method={anchor_method})",
+                flush=True,
+            )
 
     history = {
         "epoch": [],
@@ -1195,12 +1325,14 @@ def train_network(
         "model width": pinn.hidden,
         "sigma_mode": sigma_mode,
         "stationary": stationary,
-        "n_features": len(FEATURE_NAMES),
-        "feature_names": list(FEATURE_NAMES),
+        "n_features": len(getattr(pinn, "feature_names", FEATURE_NAMES)),
+        "feature_names": list(getattr(pinn, "feature_names", FEATURE_NAMES)),
+        "feature_set": getattr(pinn, "feature_set", DEFAULT_FEATURE_SET),
         "detach_source": detach_source,
         "relative_bs": relative_bs,
         "balance_losses": balance_losses,
         "use_mc_anchor": bool(anchor is not None),
+        "mc_anchor_method": anchor_method if anchor is not None else None,
         "lambda_data": float(lambda_data),
     }
 
@@ -1328,8 +1460,14 @@ def train_network(
                         "model_type": "bergomi2",
                         "hidden": pinn.hidden,
                         "depth": pinn.depth,
-                        "feature_names": FEATURE_NAMES,
+                        "feature_set": getattr(pinn, "feature_set", DEFAULT_FEATURE_SET),
+                        "feature_names": list(
+                            getattr(pinn, "feature_names", FEATURE_NAMES)
+                        ),
                         "use_mc_anchor": bool(anchor is not None),
+                        "mc_anchor_method": (
+                            anchor_method if anchor is not None else None
+                        ),
                     },
                     best_model_path,
                 )

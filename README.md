@@ -16,7 +16,7 @@ QMC/MC suites). Full dumps live in `results/metrics.json`.
 | HD Black–Scholes | `hd_minimal.pt` | BS closed form | **0.301** | 0.237 | 1.22 | ATM \(T=1\): 10.19 |
 | Heston | `long_training_heston.pt` | COS method | **0.216** | 0.172 | 0.44 | Default test market |
 | 1-factor Bergomi | `bergomi.pt` | QMC+ADD (131k) | **0.137** | 0.110 | 0.32 | Rel. RMSE 0.061; 0 negatives |
-| 2-factor Bergomi | `bergomi2.pt` | MC (40k paths) | **0.309** | 0.255 | 0.59 | ATM $T=1$: 10.29 vs MC 10.11 |
+| 2-factor Bergomi | `bergomi2.pt` | MC (40k paths) | **0.278** | 0.229 | 0.52 | v1b feats; ATM $T=1$: 10.29 vs MC 10.11 |
 
 1-factor Bergomi smile heatmaps (abs \(L^\infty\) vs QMC+ADD): baseline 0.30,
 strong vol-of-vol 0.51, strong neg. skew 0.59, mild fast MR 0.21, slow MR 0.92,

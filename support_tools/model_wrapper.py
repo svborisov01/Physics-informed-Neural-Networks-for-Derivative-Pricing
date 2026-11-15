@@ -176,6 +176,8 @@ def _build_pinn(model_type: ModelType, ckpt: dict, hidden: int, depth: int) -> n
             v_max=ckpt.get("v_max", 1.0),
             kappa_floor=ckpt.get("kappa_floor", 0.25),
             price_softplus_beta=ckpt.get("price_softplus_beta", 400.0),
+            feature_set=ckpt.get("feature_set"),
+            feature_names=ckpt.get("feature_names"),
         )
 
     from pricing.heston_option_pricing import PINN

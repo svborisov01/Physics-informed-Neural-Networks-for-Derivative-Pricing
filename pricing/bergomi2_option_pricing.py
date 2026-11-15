@@ -1089,15 +1089,23 @@ class PINN(nn.Module):
 def _build_mc_anchor_batch(
     device,
     dtype,
-    n_paths: int = 25_000,
+    n_paths: int = 32_768,
     n_steps: int = 64,
     seed: int = 7,
+    method: str = "qmc_add",
 ):
     """
-    Precompute a small MC price table on the evaluation market
+    Precompute a small price table on the evaluation market
     (X1=X2=0, ξ0=0.04, …) used as a soft supervised anchor.
+
+    ``method`` is ``\"qmc_add\"`` (default; scrambled Sobol' + antithetic
+    differencing) or ``\"mc\"`` (plain Monte Carlo).
     """
-    from support_tools.monte_carlo_pricing_tools import Bergomi2_Monte_Carlo
+    from support_tools.monte_carlo_pricing_tools import (
+        Bergomi2_Monte_Carlo,
+        bergomi2_mc_grid,
+        bergomi2_qmc_add_grid,
+    )
 
     K = 100.0
     S_grid = np.array([80.0, 90.0, 100.0, 110.0, 120.0, 130.0], dtype=np.float64)
@@ -1114,22 +1122,43 @@ def _build_mc_anchor_batch(
         rho2=-0.3,
         rho12=0.2,
     )
+    method = str(method).lower()
+    grid_kw = dict(
+        S_grid=S_grid,
+        tau_grid=tau_grid,
+        K=K,
+        n_paths=n_paths,
+        n_steps=n_steps,
+        stationary=True,
+        seed=seed,
+        **market,
+    )
+    if method in {"qmc_add", "qmc", "add"}:
+        prices, _se = bergomi2_qmc_add_grid(**grid_kw)
+    elif method in {"mc", "monte_carlo"}:
+        prices, _se = bergomi2_mc_grid(**grid_kw)
+    else:
+        # Fallback: pointwise MC (legacy path)
+        prices = np.empty((S_grid.size, tau_grid.size), dtype=np.float64)
+        for j, tau in enumerate(tau_grid):
+            for i, S in enumerate(S_grid):
+                prices[i, j] = Bergomi2_Monte_Carlo(
+                    S0=float(S),
+                    K=K,
+                    T=float(tau),
+                    n_paths=n_paths,
+                    n_steps=n_steps,
+                    seed=seed + int(1000 * tau) + int(S),
+                    return_stderr=False,
+                    **market,
+                )
+
     S_list, tau_list, u_list = [], [], []
-    for tau in tau_grid:
-        for S in S_grid:
-            price = Bergomi2_Monte_Carlo(
-                S0=float(S),
-                K=K,
-                T=float(tau),
-                n_paths=n_paths,
-                n_steps=n_steps,
-                seed=seed + int(1000 * tau) + int(S),
-                return_stderr=False,
-                **market,
-            )
-            S_list.append(S)
-            tau_list.append(tau)
-            u_list.append(float(price) / K)
+    for j, tau in enumerate(tau_grid):
+        for i, S in enumerate(S_grid):
+            S_list.append(float(S))
+            tau_list.append(float(tau))
+            u_list.append(float(prices[i, j]) / K)
 
     def _col(vals):
         return torch.tensor(vals, device=device, dtype=dtype).view(-1, 1)
@@ -1166,6 +1195,11 @@ def _build_mc_anchor_batch(
         ),
         "market": market,
         "K_scalar": K,
+        "method": (
+            "qmc_add"
+            if method in {"qmc_add", "qmc", "add"}
+            else "mc"
+        ),
     }
     return batch
 
@@ -1213,7 +1247,8 @@ def train_network(
     detach_source: bool = False,
     relative_bs: bool = True,
     use_mc_anchor: bool = True,
-    mc_anchor_paths: int = 25_000,
+    mc_anchor_paths: int = 32_768,
+    mc_anchor_method: str = "qmc_add",
     mc_anchor_batch=None,
     grad_clip=1.0,
     print_every=100,
@@ -1227,9 +1262,11 @@ def train_network(
 
     - ``lambda_pde`` anneals from ``lambda_pde_start`` → ``lambda_pde_end``.
     - ``relative_bs`` removes the absolute |L[u_BS]| floor.
-    - ``use_mc_anchor`` adds a soft supervised loss on a precomputed MC grid
+    - ``use_mc_anchor`` adds a soft supervised loss on a precomputed price grid
       for the evaluation market — this corrects the ATM underpricing that pure
       PDE training left behind without needing thousands more epochs.
+    - ``mc_anchor_method`` selects the anchor pricer: ``\"qmc_add\"`` (default)
+      or ``\"mc\"``.
     - ``mc_anchor_batch`` reuses a precomputed anchor dict (skips rebuild).
     - Default ``sigma_mode='flat_fwd'`` keeps the BS baseline near the right
       ATM level so U only learns the true Bergomi correction.
@@ -1244,22 +1281,35 @@ def train_network(
     )
 
     anchor = None
+    anchor_method = str(mc_anchor_method).lower()
     if use_mc_anchor and float(lambda_data) > 0.0:
         if mc_anchor_batch is not None:
             anchor = mc_anchor_batch
+            anchor_method = str(anchor.get("method", anchor_method)).lower()
             print(
-                f"Reusing MC anchor grid ({int(anchor['u_mc'].shape[0])} pts)…",
+                f"Reusing {anchor_method} anchor grid "
+                f"({int(anchor['u_mc'].shape[0])} pts)…",
                 flush=True,
             )
         else:
             print(
-                f"Building MC anchor grid (n_paths={mc_anchor_paths})…",
+                f"Building {anchor_method} anchor grid "
+                f"(n_paths={mc_anchor_paths})…",
                 flush=True,
             )
             anchor = _build_mc_anchor_batch(
-                device, dtype, n_paths=mc_anchor_paths, n_steps=64, seed=7
+                device,
+                dtype,
+                n_paths=mc_anchor_paths,
+                n_steps=64,
+                seed=7,
+                method=anchor_method,
             )
-            print(f"MC anchor points: {int(anchor['u_mc'].shape[0])}", flush=True)
+            print(
+                f"Anchor points: {int(anchor['u_mc'].shape[0])} "
+                f"(method={anchor_method})",
+                flush=True,
+            )
 
     history = {
         "epoch": [],
@@ -1282,6 +1332,7 @@ def train_network(
         "relative_bs": relative_bs,
         "balance_losses": balance_losses,
         "use_mc_anchor": bool(anchor is not None),
+        "mc_anchor_method": anchor_method if anchor is not None else None,
         "lambda_data": float(lambda_data),
     }
 
@@ -1414,6 +1465,9 @@ def train_network(
                             getattr(pinn, "feature_names", FEATURE_NAMES)
                         ),
                         "use_mc_anchor": bool(anchor is not None),
+                        "mc_anchor_method": (
+                            anchor_method if anchor is not None else None
+                        ),
                     },
                     best_model_path,
                 )

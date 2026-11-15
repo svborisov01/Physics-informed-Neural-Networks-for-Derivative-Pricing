@@ -355,9 +355,12 @@ def _analytical_price(
     call_put = getattr(pinn, "call_put", "Call")
 
     if model_type == ModelType.BERGOMI2:
-        from support_tools.monte_carlo_pricing_tools import Bergomi2_Monte_Carlo
+        from support_tools.monte_carlo_pricing_tools import (
+            Bergomi2_Monte_Carlo,
+            Bergomi2_QMC_ADD,
+        )
 
-        return Bergomi2_Monte_Carlo(
+        mc_kwargs = dict(
             S0=spot,
             K=K,
             T=tau,
@@ -380,6 +383,10 @@ def _analytical_price(
             seed=params.get("mc_seed", 0),
             return_stderr=False,
         )
+        method = str(params.get("mc_method", "qmc_add")).lower()
+        if method in {"qmc_add", "qmc", "add"}:
+            return Bergomi2_QMC_ADD(**mc_kwargs)
+        return Bergomi2_Monte_Carlo(**mc_kwargs)
 
     if model_type == ModelType.BERGOMI:
         from support_tools.monte_carlo_pricing_tools import (
@@ -506,10 +513,10 @@ def get_default_test_params(pinn: nn.Module, metadata: Optional[dict] = None) ->
             "s_min": 70.0,
             "s_max": 140.0,
             "s_step": 10.0,
-            "n_mc_paths": 40_000,
-            "n_mc_steps": 80,
+            "n_mc_paths": 65_536,
+            "n_mc_steps": 128,
             "mc_seed": 0,
-            "mc_method": "mc",
+            "mc_method": "qmc_add",
         }
 
     if model_type == ModelType.BERGOMI:

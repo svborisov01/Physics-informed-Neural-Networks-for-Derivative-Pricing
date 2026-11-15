@@ -274,10 +274,10 @@ MC   & 0.0060 & 0.0110 & [n/a] & 21000 $\mu$s \\
 \begin{block}{Techniques that lead to better training}
 \begin{itemize}
     \item \textbf{Excessive sampling at shorter tenors}: mix uniform $\tau$ with $\mathrm{Beta}(0.5,1.5)$ samples --- short smiles drive most of the residual.
-    \item \textbf{Help from small MC samples} (2-factor): precompute a \emph{36-point} MC price grid ($\sim 25$k paths) and add a soft supervised anchor loss
+    \item \textbf{Help from small QMC samples} (2-factor): precompute a \emph{36-point} scrambled-Sobol' QMC+ADD price grid ($\sim 33$k paths) and add a soft supervised anchor loss
     \[
       \mathcal{L}_{\mathrm{data}}
-      =\mathbb{E}\!\left[\Bigl(\frac{\hat u-u^{\mathrm{MC}}}{1+|u^{\mathrm{MC}}|}\Bigr)^2\right],
+      =\mathbb{E}\!\left[\Bigl(\frac{\hat u-u^{\mathrm{QMC}}}{1+|u^{\mathrm{QMC}}|}\Bigr)^2\right],
     \]
     \item \textbf{Start with depressed $\lambda_{\mathrm{pde}}$}: this helps "catch" the boundaries of the problem first, which simplifies further training.
 \end{itemize}
@@ -292,18 +292,26 @@ MC   & 0.0060 & 0.0110 & [n/a] & 21000 $\mu$s \\
 \label{tab:pricing-comparison-bergomi}
 \begin{tabular}{lccc}
 \hline
- & RMSE & Max $|$err$|$ \\
+ & RMSE ($u$) & Max $|$err$|$ ($u$) \\
 \hline
-Heston vs COS & 0.0020 & 0.0030 \\
-Bergomi 1F vs QMC & 0.0014 & 0.0032\\
-Bergomi 2F vs QMC & 0.0039 & 0.0066\\
-Bergomi 2F + MC vs QMC & 0.0031 & 0.0059\\
+Heston vs COS & 0.0022 & 0.0039 \\
+Bergomi 1F vs QMC+ADD & 0.0015 & 0.0030 \\
+Bergomi 2F vs QMC+ADD & 0.0026 & 0.0047 \\
+Bergomi 2F + QMC aid vs QMC+ADD & 0.0018 & 0.0034 \\
 \hline
 \end{tabular}
 \end{table}
 \begin{itemize}
-    \item Small MC samples help the training, but the result is still worse than for simpler models.
+    \item Same fine grid $S\in[70,140]$, $\tau\in[0.25,1.5]$ for all models.
+    \item Small QMC samples cut 2-factor error substantially; 1-factor remains the most accurate.
 \end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Qualitative results: Heston price errors}
+\begin{center}
+    \includegraphics[width=0.68\textwidth]{Graphs/heatmap_heston.png}
+\end{center}
 \end{frame}
 
 \begin{frame}
@@ -312,17 +320,27 @@ Bergomi 2F + MC vs QMC & 0.0031 & 0.0059\\
     \includegraphics[width=0.68\textwidth]{Graphs/heatmap_baseline.png}
 \end{center}
 \begin{itemize}
-    \item Largest errors are at large $S$ and $\tau$ - a tolerable result, given high option prices at these areas.
+    \item Largest errors are at large $S$ and $\tau$ --- tolerable given high option prices there.
 \end{itemize}
 \end{frame}
 
 \begin{frame}
-\frametitle{Qualitative results: 2-factor price errors}
+\frametitle{Qualitative results: 2-factor price errors (PDE only)}
 \begin{center}
     \includegraphics[width=0.68\textwidth]{Graphs/abs_err_heatmap.png}
 \end{center}
 \begin{itemize}
-    \item There is a lot less structure in errors - something to work on.
+    \item Without price anchors the ATM region is systematically underpriced.
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Qualitative results: 2-factor + QMC training aid}
+\begin{center}
+    \includegraphics[width=0.68\textwidth]{Graphs/abs_err_heatmap_qmc_aid.png}
+\end{center}
+\begin{itemize}
+    \item Soft QMC anchors remove most of the ATM bias; residual structure remains milder.
 \end{itemize}
 \end{frame}
 

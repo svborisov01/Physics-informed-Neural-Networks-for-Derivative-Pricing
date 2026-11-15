@@ -32,6 +32,13 @@ def main():
     p.add_argument("--device", default="cpu")
     p.add_argument("--out-dir", default="results/bergomi2")
     p.add_argument("--checkpoint", default="checkpoints/bergomi2.pt")
+    p.add_argument(
+        "--anchor-method",
+        default="qmc_add",
+        choices=["qmc_add", "mc", "none"],
+        help="Supervised training-aid pricer (qmc_add / mc) or none",
+    )
+    p.add_argument("--anchor-paths", type=int, default=32_768)
     args = p.parse_args()
 
     out_dir = Path(args.out_dir)
@@ -60,6 +67,7 @@ def main():
     print(f"Feature set={args.feature_set} ({len(pinn.feature_names)}): {pinn.feature_names}")
     print(f"Params: {sum(p.numel() for p in pinn.parameters()):,}")
 
+    use_anchor = args.anchor_method != "none"
     history = train_network(
         pinn,
         N_pde=args.n_pde,
@@ -71,8 +79,10 @@ def main():
         detach_source=False,
         relative_bs=True,
         balance_losses=False,
-        use_mc_anchor=True,
-        lambda_data=2.0,
+        use_mc_anchor=use_anchor,
+        mc_anchor_method=args.anchor_method if use_anchor else "qmc_add",
+        mc_anchor_paths=args.anchor_paths,
+        lambda_data=2.0 if use_anchor else 0.0,
         print_every=args.print_every,
         best_model_path=args.checkpoint,
         save_model=True,

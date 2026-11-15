@@ -1,0 +1,16 @@
+Loaded checkpoints/bergomi2.pt | type= bergomi2
+Model: Bergomi (2-factor)
+MSE = 0.07745552100154939
+RMSE = 0.27830832003651884
+MAE = 0.22854566764410267
+ATM T=1: PINN=10.2916  MC=10.1138 ± 0.0448
+{
+  "RMSE": 0.27830832003651884,
+  "MAE": 0.22854566764410267,
+  "Max_err": 0.515779200004161,
+  "test_seconds": 4.5274670124053955
+}
+Grid: S[70.0,140.0]×29, τ[0.25,1.50]×21 (609 pts)
+MC grid done in 1.5s
+PINN grid done in 0.2s
+RMSE=0.1801  MAE=0.1508  Linf=0.4235  → results/bergomi2/abs_err_heatmap.png

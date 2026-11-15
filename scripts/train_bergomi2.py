@@ -16,14 +16,15 @@ _ROOT = Path(__file__).resolve().parents[1]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from pricing.bergomi2_option_pricing import FEATURE_NAMES, PINN, train_network
+from pricing.bergomi2_option_pricing import PINN, train_network
 
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--epochs", type=int, default=2500)
+    p.add_argument("--epochs", type=int, default=1400)
     p.add_argument("--hidden", type=int, default=96)
     p.add_argument("--depth", type=int, default=4)
+    p.add_argument("--feature-set", default="v1b", choices=["v1", "v1b", "v2"])
     p.add_argument("--n-pde", type=int, default=3500)
     p.add_argument("--n-boundary", type=int, default=1200)
     p.add_argument("--lr", type=float, default=1e-4)
@@ -51,11 +52,12 @@ def main():
         call_put="Call",
         hidden=args.hidden,
         depth=args.depth,
+        feature_set=args.feature_set,
         v_max=1.0,
         kappa_floor=0.25,
     ).to(device)
 
-    print(f"Features ({len(FEATURE_NAMES)}): {FEATURE_NAMES}")
+    print(f"Feature set={args.feature_set} ({len(pinn.feature_names)}): {pinn.feature_names}")
     print(f"Params: {sum(p.numel() for p in pinn.parameters()):,}")
 
     history = train_network(
@@ -83,7 +85,8 @@ def main():
         for k, v in history.items()
         if k != "feature_names"
     }
-    serializable["feature_names"] = FEATURE_NAMES
+    serializable["feature_names"] = list(pinn.feature_names)
+    serializable["feature_set"] = args.feature_set
     with open(hist_path, "w", encoding="utf-8") as f:
         json.dump(serializable, f, indent=2)
 

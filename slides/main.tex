@@ -40,7 +40,7 @@
 \begin{frame}
 \frametitle{Solving Black-Scholes PDE}
 \begin{itemize}
-    \item For example, consider a European Call Option. It has  terminal and boundary conditions:
+    \item For example, consider a European Call Option. It has terminal and boundary conditions:
         \begin{align*}
             V(0, S) &= \max\{S-K, 0\} \\
             V(\tau, S\to\infty) &= S - Ke^{-r\tau} \\
@@ -77,9 +77,9 @@
 \frametitle{Numerical methods for Pricing PDE}
 \begin{itemize}
     \item Call options under Heston have only quasi-analytical solution, and more complex financial instruments under this model cannot be solved analytically.
-    \item Two standard approaches for solving such advanced problems are Monte-Carlo simulations and grid-based solvers for PDEs.
+    \item Two standard approaches for solving such advanced problems are Monte Carlo simulations and grid-based solvers for PDEs.
     \item Both have major downsides: slow convergence ($\mathcal{O}(1/\sqrt{n})$) for MC, curse of dimensionality for grid-based PDE solvers.
-    \item My work is focused on developing and testing new approach for pricing derivatives with special kind of Neural Networks.
+    \item My work is focused on developing and testing a new approach for pricing derivatives with a special kind of Neural Networks.
 \end{itemize}
 \end{frame}
 
@@ -113,7 +113,7 @@
         \begin{itemize}
             \item \textbf{PDE Loss:} The norm of the solution residual. 
             \item \textbf{Boundary Conditions:} The norm of the difference between boundary conditions and predicted values on boundaries.
-            \item \textbf{Initial:} The norm of the difference between initial conditions and predicted values on boundaries.
+            \item \textbf{Initial:} The norm of the difference between initial (terminal) conditions and predicted values.
             \item \textbf{Data Loss:} Additionally, we can add the loss which punishes the divergence from the empirical data (if such data is available).
             \item \textbf{Linear Complementarity Problem Loss:} Optimal stopping loss.
         \end{itemize}
@@ -197,7 +197,7 @@ u_{\mathrm{call}}(x_{\max},\tau,r,\sigma)
 \hline
 Method & RMSE & Max err. & Train & Inf. time \\
 \hline
-PINN & 0.0020 & 0.0030 & 9494 s & 151 $\mu$s \\
+PINN & 0.0022 & 0.0039 & 9494 s & 151 $\mu$s \\
 FD   & 0.0020 & 0.0050 & [n/a] & $1.5\times 10^{7}$ $\mu$s \\
 MC   & 0.0060 & 0.0110 & [n/a] & 21000 $\mu$s \\
 \hline
@@ -227,7 +227,7 @@ MC   & 0.0060 & 0.0110 & [n/a] & 21000 $\mu$s \\
 \begin{frame}
 \frametitle{New model: Bergomi}
 \begin{itemize}
-    \item Bergomi is another popular model of stochastic volatiility.
+    \item Bergomi is another popular model of stochastic volatility.
     \item Forward variance is driven by a single OU factor $L$:
     \begin{align*}
         \frac{dS}{S} &= r\,dt + \sqrt{v}\,dW^S, \qquad
@@ -274,12 +274,12 @@ MC   & 0.0060 & 0.0110 & [n/a] & 21000 $\mu$s \\
 \begin{block}{Techniques that lead to better training}
 \begin{itemize}
     \item \textbf{Excessive sampling at shorter tenors}: mix uniform $\tau$ with $\mathrm{Beta}(0.5,1.5)$ samples --- short smiles drive most of the residual.
-    \item \textbf{Help from small MC samples} (2-factor): precompute a \emph{36-point} MC price grid ($\sim 25$k paths) and add a soft supervised anchor loss
+    \item \textbf{Help from small QMC samples} (2-factor): precompute a \emph{36-point} scrambled-Sobol' QMC+ADD price grid ($\sim 33$k paths) and add a soft supervised anchor loss
     \[
       \mathcal{L}_{\mathrm{data}}
-      =\mathbb{E}\!\left[\Bigl(\frac{\hat u-u^{\mathrm{MC}}}{1+|u^{\mathrm{MC}}|}\Bigr)^2\right],
+      =\mathbb{E}\!\left[\Bigl(\frac{\hat u-u^{\mathrm{QMC}}}{1+|u^{\mathrm{QMC}}|}\Bigr)^2\right].
     \]
-    \item \textbf{Start with depressed $\lambda_{\mathrm{pde}}$}: this helps "catch" the boundaries of the problem first, which simplifies further training.
+    \item \textbf{Start with depressed $\lambda_{\mathrm{pde}}$}: this helps ``catch'' the boundaries of the problem first, which simplifies further training.
 \end{itemize}
 \end{block}
 \end{frame}
@@ -288,22 +288,29 @@ MC   & 0.0060 & 0.0110 & [n/a] & 21000 $\mu$s \\
 \frametitle{Quantitative results for different models}
 \begin{table}[t]
 \centering
-\caption{Accuracy for different models.}
+\caption{Accuracy for different models (same fine grid; errors in \(u=V/K\)).}
 \label{tab:pricing-comparison-bergomi}
-\begin{tabular}{lccc}
+\begin{tabular}{lcc}
 \hline
  & RMSE & Max $|$err$|$ \\
 \hline
-Heston vs COS & 0.0020 & 0.0030 \\
-Bergomi 1F vs QMC & 0.0014 & 0.0032\\
-Bergomi 2F vs QMC & 0.0039 & 0.0066\\
-Bergomi 2F + MC vs QMC & 0.0031 & 0.0059\\
+Heston vs COS & 0.0022 & 0.0039 \\
+Bergomi 1F vs QMC+ADD & 0.0015 & 0.0030 \\
+Bergomi 2F vs QMC+ADD (PDE only) & 0.0026 & 0.0047 \\
+Bergomi 2F vs QMC+ADD (+ QMC anchors) & 0.0018 & 0.0034 \\
 \hline
 \end{tabular}
 \end{table}
 \begin{itemize}
-    \item Small MC samples help the training, but the result is still worse than for simpler models.
+    \item Small QMC anchors help 2F training, but it is still a bit behind 1F.
 \end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Qualitative results: Heston price errors}
+\begin{center}
+    \includegraphics[width=0.68\textwidth]{Graphs/heatmap_heston.png}
+\end{center}
 \end{frame}
 
 \begin{frame}
@@ -312,17 +319,27 @@ Bergomi 2F + MC vs QMC & 0.0031 & 0.0059\\
     \includegraphics[width=0.68\textwidth]{Graphs/heatmap_baseline.png}
 \end{center}
 \begin{itemize}
-    \item Largest errors are at large $S$ and $\tau$ - a tolerable result, given high option prices at these areas.
+    \item Largest errors are at large $S$ and $\tau$ --- a tolerable result, given high option prices in these regions.
 \end{itemize}
 \end{frame}
 
 \begin{frame}
-\frametitle{Qualitative results: 2-factor price errors}
+\frametitle{Qualitative results: 2-factor price errors (PDE only)}
+\begin{center}
+    \includegraphics[width=0.68\textwidth]{Graphs/abs_err_heatmap_pde_only.png}
+\end{center}
+\begin{itemize}
+    \item Without price anchors the ATM region is systematically underpriced.
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Qualitative results: 2-factor + QMC anchors}
 \begin{center}
     \includegraphics[width=0.68\textwidth]{Graphs/abs_err_heatmap.png}
 \end{center}
 \begin{itemize}
-    \item There is a lot less structure in errors - something to work on.
+    \item Soft QMC anchors remove most of the ATM bias; residual structure remains milder.
 \end{itemize}
 \end{frame}
 
@@ -339,7 +356,7 @@ This approach unlocks multiple possibilities for making financial markets more e
 
 \begin{frame}
 \frametitle{Further work}
-There is a number of ways I can extend my current research:
+There are a number of ways I can extend my current research:
 \begin{itemize}
     \item Work on the accuracy of 2-factor Bergomi model.
     \item Applying PINNs to more complex products, which have no analytical pricing.

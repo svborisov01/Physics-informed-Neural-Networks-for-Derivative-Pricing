@@ -1,0 +1,133 @@
+{
+  "grid": {
+    "S": [
+      70.0,
+      140.0,
+      2.5,
+      29
+    ],
+    "tau": [
+      0.25,
+      1.5,
+      21
+    ],
+    "K": 100.0,
+    "n_qmc_paths": 65536,
+    "n_qmc_steps": 128
+  },
+  "rows": [
+    {
+      "model": "Heston",
+      "benchmark": "COS",
+      "training_aid": "\u2014",
+      "checkpoint": "checkpoints/long_training_heston.pt",
+      "abs_norms": {
+        "L1": 0.19351316685227277,
+        "L2": 0.2202201406225479,
+        "Linf": 0.39097981895345413,
+        "MAE": 0.19351316685227277,
+        "RMSE": 0.2202201406225479
+      },
+      "heatmap": "results/fine_grid_comparison/heatmap_heston.png",
+      "elapsed_s": 0.4397087097167969
+    },
+    {
+      "model": "Bergomi 1F",
+      "benchmark": "QMC+ADD",
+      "training_aid": "\u2014",
+      "checkpoint": "checkpoints/bergomi.pt",
+      "abs_norms": {
+        "L1": 0.12653014125503098,
+        "L2": 0.15170128478679318,
+        "Linf": 0.30186908729053874,
+        "MAE": 0.12653014125503098,
+        "RMSE": 0.15170128478679318
+      },
+      "mean_ref_stderr": 0.02345656102641332,
+      "heatmap": "results/fine_grid_comparison/heatmap_bergomi1.png",
+      "elapsed_s": 13.653193235397339
+    },
+    {
+      "model": "Bergomi 2F",
+      "benchmark": "QMC+ADD",
+      "training_aid": "\u2014",
+      "checkpoint": "checkpoints/bergomi2_no_aid.pt",
+      "abs_norms": {
+        "L1": 0.22024555452927957,
+        "L2": 0.2578258781767906,
+        "Linf": 0.46632580007901225,
+        "MAE": 0.22024555452927957,
+        "RMSE": 0.2578258781767906
+      },
+      "mean_ref_stderr": 0.022321119711390655,
+      "heatmap": "results/fine_grid_comparison/heatmap_bergomi2.png",
+      "elapsed_s": 0.36459803581237793,
+      "meta_anchor": null,
+      "use_mc_anchor": false
+    },
+    {
+      "model": "Bergomi 2F + QMC aid",
+      "benchmark": "QMC+ADD",
+      "training_aid": "QMC+ADD samples",
+      "checkpoint": "checkpoints/bergomi2_qmc_aid.pt",
+      "abs_norms": {
+        "L1": 0.1575401745260905,
+        "L2": 0.1790106535632409,
+        "Linf": 0.3446160175802201,
+        "MAE": 0.1575401745260905,
+        "RMSE": 0.1790106535632409
+      },
+      "mean_ref_stderr": 0.022321119711390655,
+      "heatmap": "results/fine_grid_comparison/heatmap_bergomi2_qmc_aid.png",
+      "elapsed_s": 0.3641629219055176,
+      "meta_anchor": "qmc_add",
+      "use_mc_anchor": true
+    }
+  ],
+  "table": [
+    {
+      "model": "Heston",
+      "benchmark": "COS",
+      "training_aid": "\u2014",
+      "RMSE_V": 0.2202201406225479,
+      "Max_V": 0.39097981895345413,
+      "MAE_V": 0.19351316685227277,
+      "RMSE_u": 0.002202201406225479,
+      "Max_u": 0.003909798189534542,
+      "heatmap": "results/fine_grid_comparison/heatmap_heston.png"
+    },
+    {
+      "model": "Bergomi 1F",
+      "benchmark": "QMC+ADD",
+      "training_aid": "\u2014",
+      "RMSE_V": 0.15170128478679318,
+      "Max_V": 0.30186908729053874,
+      "MAE_V": 0.12653014125503098,
+      "RMSE_u": 0.0015170128478679318,
+      "Max_u": 0.0030186908729053874,
+      "heatmap": "results/fine_grid_comparison/heatmap_bergomi1.png"
+    },
+    {
+      "model": "Bergomi 2F",
+      "benchmark": "QMC+ADD",
+      "training_aid": "\u2014",
+      "RMSE_V": 0.2578258781767906,
+      "Max_V": 0.46632580007901225,
+      "MAE_V": 0.22024555452927957,
+      "RMSE_u": 0.002578258781767906,
+      "Max_u": 0.004663258000790122,
+      "heatmap": "results/fine_grid_comparison/heatmap_bergomi2.png"
+    },
+    {
+      "model": "Bergomi 2F + QMC aid",
+      "benchmark": "QMC+ADD",
+      "training_aid": "QMC+ADD samples",
+      "RMSE_V": 0.1790106535632409,
+      "Max_V": 0.3446160175802201,
+      "MAE_V": 0.1575401745260905,
+      "RMSE_u": 0.001790106535632409,
+      "Max_u": 0.003446160175802201,
+      "heatmap": "results/fine_grid_comparison/heatmap_bergomi2_qmc_aid.png"
+    }
+  ]
+}

@@ -362,8 +362,7 @@ MC reference & --- & --- & --- & $10.11\pm 0.04$ \\
     \includegraphics[width=0.70\textwidth]{Graphs/abs_err_heatmap.png}
 \end{center}
 \begin{itemize}
-    \item Title RMSE \(0.3087\) is dollar \(V\); in \(u=V/K\) that is \(0.0031\).
-    \item Errors concentrate at high \(S\) and long \(\tau\); ATM strip stays dark (anchors + flat-fwd BS baseline).
+    \item Errors concentrate at high \(S\) and long \(\tau\); which is tolerable as the options are worth a lot for these parameters
 \end{itemize}
 \end{frame}
 
@@ -382,7 +381,7 @@ This approach unlocks multiple possibilities for making financial markets more e
 \frametitle{Further work}
 There is a number of ways I can extend my current research:
 \begin{itemize}
-    \item Using PINNs to solve inverse problem: given observable market prices, calibrate the parameters of the model.
+    \item Work on the accuracy of 2-factor Bergomi model.
     \item Applying PINNs to more complex products, which have no analytical pricing.
 \end{itemize}
 \end{frame}

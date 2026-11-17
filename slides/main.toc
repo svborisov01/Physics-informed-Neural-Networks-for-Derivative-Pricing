@@ -1,0 +1,5 @@
+\beamer@sectionintoc {1}{Theory of the derivatives pricing with PDEs}{3}{0}{1}
+\beamer@sectionintoc {2}{Physics-Informed Neural Networks}{7}{0}{2}
+\beamer@sectionintoc {3}{Practical results: Heston}{13}{0}{3}
+\beamer@sectionintoc {4}{Practical results: Bergomi}{16}{0}{4}
+\beamer@sectionintoc {5}{Conclusion and extensions}{23}{0}{5}

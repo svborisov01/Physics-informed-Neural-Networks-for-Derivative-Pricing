@@ -9,8 +9,8 @@
 
 \title[PINNs for derivatives pricing]{Using Physics-Informed Neural Networks for pricing derivative financial contracts under stochastic volatility}
 \author{Stanislav Borisov}
-\institute[HSE University]{HSE University, Sber}
-\date{October 14, 2026}
+\institute[HSE University]{HSE University, MIPT, Sber}
+\date{November 17, 2026}
 
 \usetheme{Madrid}
 \usecolortheme{seahorse}
@@ -178,7 +178,7 @@ u_{\mathrm{call}}(x_{\max},\tau,r,\sigma)
 
   \vspace{0.4cm}
   \begin{block}{Why it helps}
-    Because we "de-scale" the function the Network learns, adjustment $\to0$ OTM and ITM.
+    Because we "de-scale" and bound the function the Network learns, adjustment $\to0$ OTM and ITM.
   \end{block}
 \end{frame}
 
@@ -187,7 +187,7 @@ u_{\mathrm{call}}(x_{\max},\tau,r,\sigma)
 \frametitle{Comparison with current pricing methods}
 \begin{itemize}
     \item Such alterations to the original equation lead to significant performance boost
-    (Heston, errors in normalized price \(u=V/K\), vs.\ COS):
+    (errors in normalized price \(u=V/K\), vs.\ COS):
 \end{itemize}
     \begin{table}[t]
 \centering
@@ -270,6 +270,31 @@ MC   & 0.0060 & 0.0110 & [n/a] & 21000 $\mu$s \\
 \end{frame}
 
 \begin{frame}
+\frametitle{American down-and-out call under different models}
+\begin{itemize}
+    \item Taking the same NVDA options and fitting BS / Heston / 1F / 2F Bergomi to live vanillas, then pricing one American down-and-out call.
+    \item Contract: $S_0\approx 159$, $K\approx 167$, $B\approx 144$, $T\approx 0.42$y.
+\end{itemize}
+\begin{table}[t]
+\centering
+\scriptsize
+\begin{tabular}{lcc}
+\hline
+Model & Price & Knock-out prob. \\
+\hline
+Black--Scholes & 13.95 & 0.73\\
+Heston-like & 14.09 & 0.72\\
+1-factor Bergomi & 12.16 & 0.66\\
+2-factor Bergomi & 11.21 & 0.62\\
+\hline
+\end{tabular}
+\end{table}
+\begin{itemize}
+    \item Richer vol dynamics change knock-out risk --- model risk on the exotics is large even when vanillas are fitted.
+\end{itemize}
+\end{frame}
+
+\begin{frame}
 \frametitle{Special treatment for Bergomi PINNs}
 \begin{block}{Techniques that lead to better training}
 \begin{itemize}
@@ -295,9 +320,9 @@ MC   & 0.0060 & 0.0110 & [n/a] & 21000 $\mu$s \\
  & RMSE & Max $|$err$|$ \\
 \hline
 Heston vs COS & 0.0022 & 0.0039 \\
-Bergomi 1F vs QMC+ADD & 0.0015 & 0.0030 \\
-Bergomi 2F vs QMC+ADD (PDE only) & 0.0026 & 0.0047 \\
-Bergomi 2F vs QMC+ADD (+ QMC anchors) & 0.0018 & 0.0034 \\
+Bergomi 1F vs QMC & 0.0015 & 0.0030 \\
+Bergomi 2F (PDE only) vs QMC & 0.0026 & 0.0047 \\
+Bergomi 2F (+QMC anchors) vs QMC& 0.0018 & 0.0034 \\
 \hline
 \end{tabular}
 \end{table}
@@ -307,17 +332,7 @@ Bergomi 2F vs QMC+ADD (+ QMC anchors) & 0.0018 & 0.0034 \\
 \end{frame}
 
 \begin{frame}
-\frametitle{Qualitative results: 1-factor Bergomi}
-\begin{center}
-    \includegraphics[width=0.68\textwidth]{Graphs/heatmap_baseline.png}
-\end{center}
-\begin{itemize}
-    \item Largest errors are at large $S$ and $\tau$ --- a tolerable result, given high option prices in these regions.
-\end{itemize}
-\end{frame}
-
-\begin{frame}
-\frametitle{Qualitative results: 2-factor Bergomi}
+\frametitle{Qualitative results: 2-factor Bergomi error heatmap}
 \begin{center}
     \includegraphics[width=0.68\textwidth]{Graphs/abs_err_heatmap.png}
 \end{center}
@@ -338,6 +353,8 @@ This approach unlocks multiple possibilities for making financial markets more e
 \frametitle{Further work}
 There are a number of ways I can extend my current research:
 \begin{itemize}
+    \item Introduce a non-flat initial forward-variance curve $\xi_0(T)$
+      (instead of flat $\bar\xi$) to match the ATM term structure.
     \item Work on the accuracy of 2-factor Bergomi model.
     \item Applying PINNs to more complex products, which have no analytical pricing.
 \end{itemize}

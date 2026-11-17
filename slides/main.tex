@@ -343,6 +343,40 @@ Bergomi 2F vs QMC+ADD (+ QMC anchors) & 0.0018 & 0.0034 \\
 \end{itemize}
 \end{frame}
 
+\section{Beyond vanillas: American barriers}
+
+\begin{frame}
+\frametitle{American down-and-out call under different models}
+\begin{itemize}
+    \item Same NVDA strip: fit BS / Heston / 1F / 2F Bergomi to live vanillas, then price one American down-and-out call (no closed form; LSMC).
+    \item Contract: $S_0\approx 159$, $K\approx 167$, $B\approx 144$, $T\approx 0.42$y.
+\end{itemize}
+\begin{table}[t]
+\centering
+\scriptsize
+\begin{tabular}{lccc}
+\hline
+Model & American DAO & Knock-out prob. & vs 2F \\
+\hline
+Black--Scholes & 13.95 & 0.73 & $+24\%$ \\
+Heston-like & 14.09 & 0.72 & $+26\%$ \\
+1-factor Bergomi & 12.16 & 0.66 & $+8\%$ \\
+2-factor Bergomi & 11.21 & 0.62 & --- \\
+\hline
+\end{tabular}
+\end{table}
+\begin{itemize}
+    \item Richer vol dynamics change knock-out risk --- model risk on the exotic is large even when vanillas are fitted.
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{American barrier: prices and knock-out probabilities}
+\begin{center}
+    \includegraphics[width=0.95\textwidth]{Graphs/american_barrier_prices.png}
+\end{center}
+\end{frame}
+
 \section{Conclusion and extensions}
 
 \begin{frame}
@@ -359,7 +393,7 @@ This approach unlocks multiple possibilities for making financial markets more e
 There are a number of ways I can extend my current research:
 \begin{itemize}
     \item Work on the accuracy of 2-factor Bergomi model.
-    \item Applying PINNs to more complex products, which have no analytical pricing.
+    \item Applying PINNs to more complex products, which have no analytical pricing (e.g.\ American barriers).
 \end{itemize}
 \end{frame}
 
